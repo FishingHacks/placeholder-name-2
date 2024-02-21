@@ -5,10 +5,11 @@ use crate::{screens::GUIScreen, world::{ChunkBlockMetadata, World}};
 pub enum Task {
     ExitGame,
     Custom(Box<dyn Fn() -> () + Send>),
-    OpenScreen(Box<dyn GUIScreen>, i32, i32),
     OpenScreenCentered(Box<dyn GUIScreen>),
     CloseScreen,
-    WorldUpdateBlock(Box<dyn Fn(ChunkBlockMetadata, &mut World) -> () + Send>, ChunkBlockMetadata),
+    WorldUpdateBlock(&'static (dyn Fn(ChunkBlockMetadata, &mut World) -> () + Sync), ChunkBlockMetadata),
+    CloseWorld,
+    OpenWorld,
 }
 
 static TASKS: Mutex<Vec<Task>> = Mutex::new(Vec::new());

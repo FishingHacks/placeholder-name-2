@@ -1,9 +1,13 @@
 use raylib::drawing::RaylibDrawHandle;
-use std::{collections::HashMap, fmt::Display};
+use std::{
+    collections::HashMap,
+    fmt::Display,
+    ops::{Add, AddAssign, Sub, SubAssign},
+};
 
 use crate::{
     blocks::{empty_block, Block},
-    identifier::Identifier,
+    identifier::Identifier, RenderLayer,
 };
 
 pub struct World {
@@ -107,13 +111,13 @@ impl World {
         }
     }
 
-    pub fn update(&self) {
-        for (_, chunk) in self.loaded_chunks.iter() {
+    pub fn update(&mut self) {
+        for (_, chunk) in self.loaded_chunks.iter_mut() {
             chunk.update();
         }
     }
 
-    pub fn render(&mut self, d: &mut RaylibDrawHandle, x: i32, y: i32, w: u32, h: u32) {
+    pub fn render(&mut self, d: &mut RaylibDrawHandle, x: i32, y: i32, w: u32, h: u32, layer: RenderLayer) {
         let first_chunk_x = 0.max((x.wrapping_div(CHUNK_W as i32)) - self.startx - 1) as u32;
         let first_chunk_y = 0.max((y.wrapping_div(CHUNK_H as i32)) - self.starty - 1) as u32;
 
@@ -132,7 +136,7 @@ impl World {
                 let sc_y = chunk_y * CHUNK_H as i32 - y;
 
                 if let Some(chunk) = self.loaded_chunks.get_mut(&(chunk_x, chunk_y)) {
-                    chunk.render(d, sc_x, sc_y, CHUNK_W, CHUNK_H, BLOCK_W, BLOCK_H);
+                    chunk.render(d, sc_x, sc_y, CHUNK_W, CHUNK_H, BLOCK_W, BLOCK_H, layer);
                 }
             }
         }
@@ -148,6 +152,7 @@ pub const CHUNK_H: u32 = BLOCK_H * BLOCKS_PER_CHUNK_Y;
 
 /// chunks: 32x32 area
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct Chunk {
     pub blocks: Vec<ChunkBlock>,
     chunk_x: i32,
@@ -229,8 +234,8 @@ impl Chunk {
         }
     }
 
-    pub fn update(&self) {
-        for blk in &self.blocks {
+    pub fn update(&mut self) {
+        for blk in &mut self.blocks {
             blk.update();
         }
     }
@@ -244,6 +249,7 @@ impl Chunk {
         h: u32,
         block_w: u32,
         block_h: u32,
+        layer: RenderLayer,
     ) -> (u32, u32) {
         let blocks_x = w.div_ceil(block_w).min(BLOCKS_PER_CHUNK_X);
         let blocks_y = h.div_ceil(block_h).min(BLOCKS_PER_CHUNK_Y);
@@ -256,6 +262,7 @@ impl Chunk {
                     y + (blk_y * block_h) as i32,
                     block_w as i32,
                     block_h as i32,
+                    layer,
                 );
             }
         }
@@ -264,13 +271,33 @@ impl Chunk {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Direction {
     #[default]
     North,
     East,
     South,
     West,
+}
+
+impl From<u8> for Direction {
+    fn from(value: u8) -> Self {
+        match value % 4 {
+            0 => Self::North,
+            1 => Self::East,
+            2 => Self::South,
+            3 => Self::West,
+            _ => Self::North,
+        }
+    }
+}
+
+impl Add for Direction {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        (self as u8 + rhs as u8).into()
+    }
 }
 
 impl Direction {
@@ -286,11 +313,92 @@ impl Direction {
             Self::West => Self::South,
         }
     }
+
+    pub fn opposite(&self) -> Self {
+        match self {
+            Self::North => Self::South,
+            Self::South => Self::North,
+            Self::West => Self::East,
+            Self::East => Self::West,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Vec2i {
+    pub x: i32,
+    pub y: i32,
+}
+
+impl Add for Vec2i {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+        }
+    }
+}
+
+impl AddAssign for Vec2i {
+    fn add_assign(&mut self, rhs: Self) {
+        self.x += rhs.x;
+        self.y += rhs.y;
+    }
+}
+
+impl Sub for Vec2i {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+        }
+    }
+}
+
+impl SubAssign for Vec2i {
+    fn sub_assign(&mut self, rhs: Self) {
+        self.x -= rhs.x;
+        self.y -= rhs.y;
+    }
+}
+
+impl Display for Vec2i {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{}, {}", self.x, self.y))
+    }
+}
+
+impl Vec2i {
+    pub fn new(x: i32, y: i32) -> Self {
+        Self { x, y }
+    }
+
+    pub fn add_directional(&self, direction: &Direction, steps: i32) -> Vec2i {
+        match direction {
+            Direction::North => *self - Self::new(0, steps),
+            Direction::South => *self + Self::new(0, steps),
+            Direction::East => *self - Self::new(steps, 0),
+            Direction::West => *self + Self::new(steps, 0),
+        }
+    }
+
+    pub fn add_directional_assign(&mut self, direction: &Direction, steps: i32) {
+        match direction {
+            Direction::North => self.y -= steps,
+            Direction::South => self.y += steps,
+            Direction::East => self.x -= steps,
+            Direction::West => self.x += steps,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ChunkBlockMetadata {
-    pub position: (i32, i32),
+    pub position: Vec2i,
     pub direction: Direction,
 }
 
@@ -298,7 +406,7 @@ impl From<Direction> for ChunkBlockMetadata {
     fn from(direction: Direction) -> Self {
         Self {
             direction,
-            position: (0, 0),
+            position: Vec2i::default(),
         }
     }
 }
@@ -314,20 +422,20 @@ impl ChunkBlock {
             inner,
             data: ChunkBlockMetadata {
                 direction,
-                position: (pos_x, pos_y),
+                position: Vec2i::new(pos_x, pos_y),
             },
         }
     }
     pub fn init(&mut self) {
         self.inner.init(self.data);
     }
-    pub fn render(&self, d: &mut RaylibDrawHandle, x: i32, y: i32, w: i32, h: i32) {
-        self.inner.render(d, x, y, w, h, self.data)
+    pub fn render(&self, d: &mut RaylibDrawHandle, x: i32, y: i32, w: i32, h: i32, layer: RenderLayer) {
+        self.inner.render(d, x, y, w, h, self.data, layer)
     }
     pub fn identifier(&self) -> Identifier {
         self.inner.identifier()
     }
-    pub fn update(&self) {
+    pub fn update(&mut self) {
         self.inner.update(self.data);
     }
 }
@@ -349,10 +457,9 @@ impl Clone for ChunkBlock {
 impl Display for ChunkBlock {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!(
-            "Block {:?} at {}:{}",
+            "Block {:?} at {}",
             self.inner.identifier(),
-            self.data.position.0,
-            self.data.position.1
+            self.data.position
         ))
     }
 }

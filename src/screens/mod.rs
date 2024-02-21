@@ -6,10 +6,12 @@ mod player_inventory_screen;
 mod escape_screen;
 mod selector_screen;
 mod container_inventory_screen;
+mod main_screen;
 pub use selector_screen::SelectorScreen;
 pub use escape_screen::EscapeScreen;
 pub use player_inventory_screen::PlayerInventoryScreen;
 pub use container_inventory_screen::ContainerInventoryScreen;
+pub use main_screen::MainScreen;
 
 use crate::{identifier::GlobalString, scheduler::{schedule_task, Task}, world::World, GameConfig};
 
@@ -51,7 +53,7 @@ pub trait GUIScreen: Send {
 
 static CURRENT_SCREEN: Mutex<(Option<Box<dyn GUIScreen>>, i32, i32)> = Mutex::new((None, 0, 0));
 
-pub fn open_screen(mut screen: Box<dyn GUIScreen>, x: i32, y: i32) {
+pub fn open_screen(screen: Box<dyn GUIScreen>, x: i32, y: i32) {
     let mut sc = CURRENT_SCREEN.lock().unwrap();
     *sc = (Some(screen), x, y);
 }
@@ -115,11 +117,18 @@ impl CurrentScreen {
         }
     }
 
-    pub fn is(name: &str) -> bool {
-        match &mut CURRENT_SCREEN.lock().unwrap().0 {
-            None => false,
-            Some(v) => v.name().as_str() == name,
-        }
+    // pub fn is(name: &str) -> bool {
+    //     match &mut CURRENT_SCREEN.lock().unwrap().0 {
+    //         None => false,
+    //         Some(v) => v.name().as_str() == name,
+    //     }
+    // }
+
+    pub fn move_to_center(screen: &ScreenDimensions) {
+        let dim = Self::get_dimensions(screen);
+        let x = (screen.width - dim.width) / 2;
+        let y = (screen.height - dim.height) / 2;
+        move_screen(x, y);
     }
 
     pub fn render(cfg: &mut GameConfig, renderer: &mut RaylibDrawHandle, screen: &ScreenDimensions, world: &mut World) {
@@ -140,10 +149,6 @@ impl CurrentScreen {
         schedule_task(Task::CloseScreen);
     }
 
-    pub fn open(screen: Box<dyn GUIScreen>, x: i32, y: i32) {
-        open_screen(screen, x, y);
-    }
-
     pub fn open_centered(mut screen: Box<dyn GUIScreen>, window: &ScreenDimensions) {
         let screen_dims = screen.get_dimensions(window);
         let x = (window.width - screen_dims.width) / 2;
@@ -152,13 +157,13 @@ impl CurrentScreen {
         open_screen(screen, x, y);
     }
 
-    pub fn is_in_bounds(x: i32, y: i32, screen: &ScreenDimensions) -> bool {
-        let mut sc = CURRENT_SCREEN.lock().unwrap();
-        let sc_x = sc.1;
-        let sc_y = sc.2;
-        match &mut sc.0 {
-            None => false,
-            Some(sc) => sc.is_in_bounds(x - sc_x, y - sc_y, screen),
-        }
-    }
+    // pub fn is_in_bounds(x: i32, y: i32, screen: &ScreenDimensions) -> bool {
+    //     let mut sc = CURRENT_SCREEN.lock().unwrap();
+    //     let sc_x = sc.1;
+    //     let sc_y = sc.2;
+    //     match &mut sc.0 {
+    //         None => false,
+    //         Some(sc) => sc.is_in_bounds(x - sc_x, y - sc_y, screen),
+    //     }
+    // }
 }

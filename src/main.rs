@@ -1,22 +1,24 @@
-use std::time::Instant;
+use std::{sync::Mutex, time::Instant};
 
 use blocks::{
     empty_block, get_block_by_id, register_blocks, Block, BLOCK_EMPTY, BLOCK_RESOURCE_NODE_BLUE,
 };
 use inventory::{Inventory, NUM_SLOTS_PLAYER};
-use items::{register_items, Item};
+use items::register_items;
 use raylib::{
     color::Color,
     drawing::RaylibDraw,
     math::{Rectangle, Vector2},
+    RaylibHandle,
 };
 use scheduler::{get_tasks, schedule_task, Task};
 use screens::{
-    close_screen, CurrentScreen, EscapeScreen, PlayerInventoryScreen, ScreenDimensions,
+    close_screen, CurrentScreen, EscapeScreen, MainScreen, PlayerInventoryScreen, ScreenDimensions,
     SelectorScreen,
 };
 use world::{ChunkBlockMetadata, Direction, World, BLOCK_H, BLOCK_W};
 
+pub mod as_any;
 pub mod blocks;
 pub mod identifier;
 mod inventory;
@@ -25,6 +27,25 @@ pub mod notice_board;
 pub mod scheduler;
 mod screens;
 mod world;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RenderLayer {
+    Block,
+    OverlayItems,
+    OverlayGUI,
+}
+
+impl RenderLayer {
+    pub fn default_preview() -> Self {
+        Self::Block
+    }
+}
+
+pub const RENDER_LAYERS: [RenderLayer; 3] = [
+    RenderLayer::Block,
+    RenderLayer::OverlayItems,
+    RenderLayer::OverlayGUI,
+];
 
 #[macro_export]
 macro_rules! cstr {
@@ -61,23 +82,17 @@ impl GameConfig {
 pub const TPS: u32 = 20;
 pub const MSPT: u128 = (1000 / TPS) as u128;
 
-fn run_game() {
-    #[cfg(target_os = "linux")]
-    let (mut rl, thread) = raylib::init()
-        .size(1280, 720)
-        .title("Placeholder Name 2").vsync()
-        .build();
-    #[cfg(not(target_os = "linux"))]
-    let (mut rl, thread) = raylib::init()
-        .size(1280, 720)
-        .title("Placeholder Name 2")
-        .vsync() // nvidia fucks with vsync :sob:
-        .build();
+#[derive(Clone, Copy)]
+pub enum RenderFn {
+    None,
+    Game,
+    StartMenu,
+}
 
+static RENDER_STEP: Mutex<RenderFn> = Mutex::new(RenderFn::StartMenu);
+
+fn run_game(rl: &mut RaylibHandle, thread: &raylib::prelude::RaylibThread) {
     rl.set_exit_key(None);
-
-    register_blocks();
-    register_items();
 
     let mut world = World::new(20, 20);
 
@@ -92,6 +107,10 @@ fn run_game() {
     let mut ticks_per_second = 20;
 
     let mut last_render_start = Instant::now();
+    let mut last_screen_size = ScreenDimensions {
+        width: 0,
+        height: 0,
+    };
 
     while !rl.window_should_close() {
         let dt = Instant::now().duration_since(last_render_start).as_millis() as f64;
@@ -104,6 +123,13 @@ fn run_game() {
             width: rl.get_screen_width(),
             height: rl.get_screen_height(),
         };
+        if last_screen_size.width != screen_size.width
+            || last_screen_size.height != screen_size.height
+        {
+            last_screen_size.width = screen_size.width;
+            last_screen_size.height = screen_size.height;
+            CurrentScreen::move_to_center(&screen_size);
+        }
 
         let tasks = get_tasks();
 
@@ -114,7 +140,6 @@ fn run_game() {
             match t {
                 scheduler::Task::Custom(func) => func(),
                 scheduler::Task::ExitGame => return,
-                scheduler::Task::OpenScreen(screen, x, y) => CurrentScreen::open(screen, x, y),
                 scheduler::Task::OpenScreenCentered(screen) => {
                     CurrentScreen::open_centered(screen, &screen_size)
                 }
@@ -123,6 +148,11 @@ fn run_game() {
                     had_gameupdate_scheduled = true;
                     func(meta, &mut world);
                 }
+                Task::CloseWorld => {
+                    *RENDER_STEP.lock().unwrap() = RenderFn::StartMenu;
+                    return;
+                }
+                Task::OpenWorld => {}
             }
         }
         if had_gameupdate_scheduled {
@@ -235,7 +265,7 @@ fn run_game() {
         if Instant::now().duration_since(last_update).as_millis() >= MSPT {
             world.update();
             schedule_task(Task::WorldUpdateBlock(
-                Box::new(|_, _| {}),
+                &|_, _| {},
                 ChunkBlockMetadata::default(),
             ));
             notice_board::update_entries();
@@ -243,13 +273,16 @@ fn run_game() {
         }
 
         if screen_size.width >= 0 && screen_size.height >= 0 {
-            world.render(
-                &mut d,
-                player_x,
-                player_y,
-                screen_size.width as u32,
-                screen_size.height as u32,
-            );
+            for l in RENDER_LAYERS {
+                world.render(
+                    &mut d,
+                    player_x,
+                    player_y,
+                    screen_size.width as u32,
+                    screen_size.height as u32,
+                    l,
+                );
+            }
         }
 
         if game_focused {
@@ -283,7 +316,7 @@ fn run_game() {
         }
 
         if config.current_selected_block.identifier() != *BLOCK_EMPTY {
-            config.current_selected_block.render(
+            config.current_selected_block.render_all(
                 &mut d,
                 20,
                 screen_size.height - 68,
@@ -321,5 +354,83 @@ fn run_game() {
 }
 
 fn main() {
-    run_game();
+    #[cfg(target_os = "linux")]
+    let (mut rl, thread) = raylib::init()
+        .size(1280, 720)
+        .title("Placeholder Name 2")
+        .build();
+    #[cfg(not(target_os = "linux"))]
+    let (mut rl, thread) = raylib::init()
+        .size(1280, 720)
+        .title("Placeholder Name 2 with vsync")
+        .vsync() // nvidia fucks with vsync :sob:
+        .build();
+
+    register_blocks();
+    register_items();
+
+    while !rl.window_should_close() {
+        let render_fn = *RENDER_STEP.lock().unwrap();
+        *RENDER_STEP.lock().unwrap() = RenderFn::None;
+
+        reset_all();
+
+        match render_fn {
+            RenderFn::None => return,
+            RenderFn::StartMenu => render_menu(&mut rl, &thread),
+            RenderFn::Game => run_game(&mut rl, &thread),
+        }
+    }
+}
+
+pub fn render_menu(rl: &mut RaylibHandle, thread: &raylib::prelude::RaylibThread) {
+    let mut cfg = GameConfig::default();
+    let mut empty_world = World::new(0, 0);
+
+    let mut old_sc = ScreenDimensions {
+        width: rl.get_screen_width(),
+        height: rl.get_screen_height(),
+    };
+
+    while !rl.window_should_close() {
+        let sc = ScreenDimensions {
+            width: rl.get_screen_width(),
+            height: rl.get_screen_height(),
+        };
+
+        if old_sc.width != sc.width || old_sc.height != sc.height {
+            old_sc.width = sc.width;
+            old_sc.height = sc.height;
+            CurrentScreen::move_to_center(&sc);
+        }
+
+        for t in get_tasks() {
+            match t {
+                Task::CloseWorld | Task::WorldUpdateBlock(..) => {}
+                Task::CloseScreen => close_screen(),
+                Task::OpenScreenCentered(screen) => CurrentScreen::open_centered(screen, &sc),
+                Task::ExitGame => return,
+                Task::Custom(func) => func(),
+                Task::OpenWorld => {
+                    *RENDER_STEP.lock().unwrap() = RenderFn::Game;
+                    return;
+                }
+            }
+        }
+
+        let mut d = rl.begin_drawing(thread);
+
+        d.clear_background(Color::new(0x1e, 0x1e, 0x2e, 0xff));
+
+        if !CurrentScreen::is_screen_open() {
+            CurrentScreen::open_centered(Box::new(MainScreen), &sc);
+        }
+        CurrentScreen::render(&mut cfg, &mut d, &sc, &mut empty_world);
+    }
+}
+
+pub fn reset_all() {
+    close_screen();
+    get_tasks();
+    notice_board::reset();
 }

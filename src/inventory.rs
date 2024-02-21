@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use crate::{
     items::Item,
     notice_board::{self, NoticeboardEntryRenderable},
@@ -22,6 +24,24 @@ impl Clone for Inventory {
             }
         }
         new
+    }
+}
+
+impl Debug for Inventory {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.is_player {
+            f.write_fmt(format_args!(
+                "PlayerInventory[{}] = {:?}",
+                self.items.len(),
+                self.items
+            ))
+        } else {
+            f.write_fmt(format_args!(
+                "Inventory[{}] = {:?}",
+                self.items.len(),
+                self.items
+            ))
+        }
     }
 }
 
@@ -169,6 +189,9 @@ impl Inventory {
     }
 
     pub fn get_item<'a>(&'a self, slot: usize) -> &'a Option<Box<dyn Item>> {
+        if slot >= self.items.len() {
+            return &None;
+        }
         &self.items[slot]
     }
 
@@ -252,5 +275,62 @@ impl Inventory {
         } else {
             None
         }
+    }
+
+    pub fn can_pull(&self) -> bool {
+        for i in &self.items {
+            if i.is_some() {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn can_push(&self, item: &Box<dyn Item>) -> bool {
+        let mut count_remaining = if item.metadata_is_stack_size() {
+            item.metadata()
+        } else {
+            1
+        };
+
+        for i in &self.items {
+            match i {
+                None => return true,
+                Some(item_inner) => {
+                    if item_inner.identifier() != item.identifier() {
+                        continue;
+                    }
+                    if item_inner.metadata_is_stack_size() {
+                        count_remaining = count_remaining
+                            .wrapping_sub(MAX_ITEMS_PER_SLOT.wrapping_sub(item_inner.metadata()));
+                        if count_remaining == 0 {
+                            return true;
+                        }
+                    } else {
+                        continue;
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    pub fn try_pull(&mut self, num: u32) -> Option<Box<dyn Item>> {
+        for i in 0..self.items.len() {
+            match &mut self.items[i] {
+                None => continue,
+                Some(item) => {
+                    if item.metadata_is_stack_size() && item.metadata() > num {
+                        item.set_metadata(item.metadata() - num);
+                        let mut return_item = item.clone_item();
+                        return_item.set_metadata(num);
+                        return Some(return_item);
+                    } else {
+                        return self.items[i].take();
+                    }
+                }
+            }
+        }
+        None
     }
 }

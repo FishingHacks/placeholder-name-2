@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use lazy_static::lazy_static;
 use raylib::{
     color::Color,
@@ -5,10 +7,16 @@ use raylib::{
 };
 
 use crate::{
-    blocks::{get_block_by_id, Block},
+    blocks::Block,
     identifier::{GlobalString, Identifier},
-    world::{ChunkBlockMetadata, Direction},
+    world::{ChunkBlockMetadata, Direction}, RenderLayer,
 };
+
+impl Clone for Box<dyn Item> {
+    fn clone(&self) -> Self {
+        self.clone_item()
+    }
+}
 
 pub trait Item: Send + Sync {
     fn clone_item(&self) -> Box<dyn Item>;
@@ -21,6 +29,21 @@ pub trait Item: Send + Sync {
     }
     fn render(&self, renderer: &mut RaylibDrawHandle, x: i32, y: i32, w: i32, h: i32);
     fn set_metadata(&mut self, new_data: u32);
+}
+
+impl Debug for dyn Item {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!(
+            "{}({:?})[{}]",
+            self.name(),
+            self.identifier(),
+            if self.metadata_is_stack_size() {
+                self.metadata()
+            } else {
+                1
+            }
+        ))
+    }
 }
 
 lazy_static! {
@@ -80,6 +103,7 @@ impl Item for BlockItem {
             w,
             h,
             ChunkBlockMetadata::from(Direction::North),
+            RenderLayer::default_preview(),
         )
     }
     fn set_metadata(&mut self, new_data: u32) {

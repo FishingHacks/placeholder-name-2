@@ -1,7 +1,7 @@
 use lazy_static::lazy_static;
 use raylib::{drawing::RaylibDrawHandle, math::Rectangle, rgui::RaylibDrawGui};
 
-use crate::{blocks::BLOCKS, identifier::GlobalString, world::ChunkBlockMetadata, GameConfig};
+use crate::{blocks::BLOCKS, identifier::GlobalString, world::ChunkBlockMetadata, GameConfig, RenderLayer};
 
 use super::{Screen, ScreenDimensions};
 
@@ -69,6 +69,7 @@ impl Screen for SelectorScreen {
                 BLOCK_W as i32,
                 BLOCK_H as i32,
                 ChunkBlockMetadata::default(),
+                RenderLayer::default_preview(),
             );
             block_idx += 1;
         }
