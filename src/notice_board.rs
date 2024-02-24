@@ -140,23 +140,6 @@ pub fn add_entry(contents: NoticeboardEntryRenderable, time_in_seconds: u32) {
 
 pub fn update_entries() {
     let mut board = NOTICE_BOARD.lock().unwrap();
-    // let mut for_removal: Vec<usize> = Vec::with_capacity(board.len());
-
-    // for i in 0..board.len() {
-    //     if match board[i].should_decay.duration_since(SystemTime::now()) {
-    //         Err(..) => true,
-    //         Ok(v) => v.is_zero(),
-    //     } {
-    //         for_removal.push(i);
-    //     }
-    // }
-
-    // for_removal.sort();
-    // for idx in for_removal {
-    //     if idx < board.len() {
-    //         board.remove(idx);
-    //     }
-    // }
 
     let mut i = 0;
     while i < board.len() {

@@ -126,7 +126,7 @@ impl Serialize for bool {
 }
 impl Deserialize for bool {
     fn try_deserialize(buf: &mut Buffer) -> Result<Self, SerializationError> {
-        if buf.try_read_elements(1)?[0] != 0 {
+        if buf.try_read_element()? != 0 {
             Ok(true)
         } else {
             Ok(false)
@@ -559,9 +559,9 @@ pub fn load_game(file: String) -> Result<(World, GameConfig, SystemTime), Serial
 
     // config
     let mut config: GameConfig = GameConfig::default();
-    config.inventory = Inventory::deserialize(&mut buf);
+    config.inventory = Inventory::try_deserialize(&mut buf)?;
 
-    if buf.len() < 1 {
+    if buf.len() > 0 {
         return Err(SerializationError::InvalidData);
     }
 

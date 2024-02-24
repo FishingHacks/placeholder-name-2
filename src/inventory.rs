@@ -47,6 +47,16 @@ impl Debug for Inventory {
 }
 
 impl Inventory {
+    pub fn update(&mut self) {
+        for itm in &mut self.items {
+            if let Some(item) = itm {
+                if item.metadata() == 0 {
+                    itm.take();
+                }
+            }
+        }
+    }
+
     pub fn size(&self) -> usize {
         self.items.len()
     }

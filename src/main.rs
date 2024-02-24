@@ -1,4 +1,4 @@
-use std::{sync::Mutex, time::Instant};
+use std::{sync::Mutex, thread, time::Instant};
 
 use assets::update_textures;
 use blocks::{
@@ -9,7 +9,11 @@ use inventory::{Inventory, NUM_SLOTS_PLAYER};
 use items::register_items;
 use notice_board::NoticeboardEntryRenderable;
 use raylib::{
-    color::Color, drawing::RaylibDraw, ffi::KeyboardKey, math::{Rectangle, Vector2}, RaylibHandle
+    color::Color,
+    drawing::RaylibDraw,
+    ffi::KeyboardKey,
+    math::{Rectangle, Vector2},
+    RaylibHandle,
 };
 use scheduler::{get_tasks, schedule_task, Task};
 use screens::{
@@ -164,12 +168,14 @@ fn run_game(
                     *RENDER_STEP.lock().unwrap() = RenderFn::StartMenu;
                     return;
                 }
-                Task::OpenWorld(..) | Task::CreateWorld => notice_board::add_entry(
-                    NoticeboardEntryRenderable::String(
-                        "WARN!! RECEIVED WORLD OPENING TASK IN RUN_GAME(..)".to_string(),
-                    ),
-                    20,
-                ),
+                Task::OpenWorld(..) | Task::CreateWorld | Task::__OpnWrld(..) => {
+                    notice_board::add_entry(
+                        NoticeboardEntryRenderable::String(
+                            "WARN!! RECEIVED WORLD OPENING TASK IN RUN_GAME(..)".to_string(),
+                        ),
+                        20,
+                    )
+                }
             }
         }
         if had_gameupdate_scheduled {
@@ -313,7 +319,7 @@ fn run_game(
                 );
             }
 
-            if let Some((block, data)) = world.get_block_at(cursor_x, cursor_y) {
+            if let Some((block, data)) = world.get_block_at_mut(cursor_x, cursor_y) {
                 if block.supports_interaction() {
                     d.draw_text(
                         block
@@ -365,7 +371,7 @@ fn run_game(
         );
 
         CurrentScreen::render(&mut config, &mut d, &screen_size, &mut world);
-        
+
         notice_board::render_entries(&mut d, screen_size.height / 2, screen_size.height);
     }
 }
@@ -437,16 +443,26 @@ pub fn render_menu(rl: &mut RaylibHandle, thread: &raylib::prelude::RaylibThread
                         RenderFn::Game(World::new(20, 20), GameConfig::default());
                     return;
                 }
-                Task::OpenWorld(file) => match load_game(file) {
-                    Ok((world, cfg, _)) => {
-                        *RENDER_STEP.lock().unwrap() = RenderFn::Game(world, cfg);
-                        return;
-                    }
-                    Err(e) => notice_board::add_entry(
-                        NoticeboardEntryRenderable::String(format!("Couldn't load World: {e:?}")),
-                        20,
-                    ),
-                },
+                Task::__OpnWrld(world, cfg) => {
+                    *RENDER_STEP.lock().unwrap() = RenderFn::Game(world, cfg);
+                    return;
+                }
+                Task::OpenWorld(file) => {
+                    thread::spawn(move || match load_game(file) {
+                        Ok((world, cfg, _)) => {
+                            schedule_task(Task::__OpnWrld(world, cfg));
+                        }
+                        Err(e) => {
+                            notice_board::add_entry(
+                                NoticeboardEntryRenderable::String(format!(
+                                    "Couldn't load World: {e:?}"
+                                )),
+                                20,
+                            );
+                            schedule_task(Task::CloseScreen);
+                        }
+                    });
+                }
             }
         }
 

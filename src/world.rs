@@ -225,7 +225,7 @@ impl Deserialize for World {
         let starty = i32::try_deserialize(buf)?;
         let w = u32::try_deserialize(buf)?;
         let h = u32::try_deserialize(buf)?;
-        
+
         let num_chunks = w as usize * h as usize;
         let mut chunks = HashMap::with_capacity(num_chunks);
 
@@ -267,8 +267,8 @@ impl Chunk {
         let mut vec: Vec<ChunkBlock> =
             Vec::with_capacity(BLOCKS_PER_CHUNK_X as usize * BLOCKS_PER_CHUNK_Y as usize);
 
-        for x in 0..BLOCKS_PER_CHUNK_X {
-            for y in 0..BLOCKS_PER_CHUNK_Y {
+        for y in 0..BLOCKS_PER_CHUNK_Y {
+            for x in 0..BLOCKS_PER_CHUNK_X {
                 let blk = ChunkBlock::new(
                     empty_block().clone_block(),
                     x as i32 + chunk_x * BLOCKS_PER_CHUNK_X as i32,
@@ -407,19 +407,20 @@ impl Deserialize for Chunk {
         let chunk_y = i32::deserialize(buf);
         let num_blocks = usize::deserialize(buf);
         let mut blocks: Vec<ChunkBlock> = Vec::with_capacity(num_blocks);
-        for i in 0..num_blocks {
-            let direction = Direction::deserialize(buf);
-            let inner = <Box<dyn Block>>::deserialize(buf);
-            blocks.push(ChunkBlock {
-                inner,
-                data: ChunkBlockMetadata {
+
+        for y in 0..BLOCKS_PER_CHUNK_Y {
+            for x in 0..BLOCKS_PER_CHUNK_X {
+                let direction = Direction::deserialize(buf);
+                let inner = <Box<dyn Block>>::deserialize(buf);
+                let blk = ChunkBlock::new(
+                    inner,
+                    x as i32 + chunk_x * BLOCKS_PER_CHUNK_X as i32,
+                    y as i32 + chunk_y * BLOCKS_PER_CHUNK_Y as i32,
                     direction,
-                    position: Vec2i::new(
-                        (i as u32 % BLOCKS_PER_CHUNK_X) as i32,
-                        (i as u32 / BLOCKS_PER_CHUNK_X) as i32,
-                    ),
-                },
-            });
+                );
+
+                blocks.push(blk);
+            }
         }
         Self {
             blocks,
@@ -434,19 +435,20 @@ impl Deserialize for Chunk {
         let chunk_y = i32::try_deserialize(buf)?;
         let num_blocks = usize::try_deserialize(buf)?;
         let mut blocks: Vec<ChunkBlock> = Vec::with_capacity(num_blocks);
-        for i in 0..num_blocks {
-            let direction = Direction::try_deserialize(buf)?;
-            let inner = <Box<dyn Block>>::try_deserialize(buf)?;
-            blocks.push(ChunkBlock {
-                inner,
-                data: ChunkBlockMetadata {
+
+        for y in 0..BLOCKS_PER_CHUNK_Y {
+            for x in 0..BLOCKS_PER_CHUNK_X {
+                let direction = Direction::try_deserialize(buf)?;
+                let inner = <Box<dyn Block>>::try_deserialize(buf)?;
+                let blk = ChunkBlock::new(
+                    inner,
+                    x as i32 + chunk_x * BLOCKS_PER_CHUNK_X as i32,
+                    y as i32 + chunk_y * BLOCKS_PER_CHUNK_Y as i32,
                     direction,
-                    position: Vec2i::new(
-                        (i as u32 % BLOCKS_PER_CHUNK_X) as i32,
-                        (i as u32 / BLOCKS_PER_CHUNK_X) as i32,
-                    ),
-                },
-            });
+                );
+
+                blocks.push(blk);
+            }
         }
         Ok(Self {
             blocks,

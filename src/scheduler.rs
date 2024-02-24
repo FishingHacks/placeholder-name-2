@@ -1,6 +1,6 @@
 use std::{mem, sync::Mutex};
 
-use crate::{screens::GUIScreen, world::{ChunkBlockMetadata, World}};
+use crate::{screens::GUIScreen, world::{ChunkBlockMetadata, World}, GameConfig};
 
 pub enum Task {
     ExitGame,
@@ -11,6 +11,7 @@ pub enum Task {
     CloseWorld,
     OpenWorld(String),
     CreateWorld,
+    __OpnWrld(World, GameConfig),
 }
 
 static TASKS: Mutex<Vec<Task>> = Mutex::new(Vec::new());

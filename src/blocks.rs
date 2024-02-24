@@ -1,7 +1,19 @@
 use std::time::Instant;
 
 use crate::{
-    as_any::AsAny, asset, assets::{load_animated_texture, AnimatedTexture2D, Frame}, derive_as_any, downcast_for, identifier::{GlobalString, Identifier}, initialized_data::InitializedData, inventory::Inventory, items::{get_item_by_id, register_block_item, Item, COAL_IDENTIFIER}, scheduler::{schedule_task, Task}, screens::ContainerInventoryScreen, serialization::{Buffer, Deserialize, SerializationError, Serialize}, world::{ChunkBlockMetadata, Direction, Vec2i, World}, GameConfig, RenderLayer, RENDER_LAYERS
+    as_any::AsAny,
+    asset,
+    assets::{load_animated_texture, AnimatedTexture2D, Frame},
+    derive_as_any, downcast_for,
+    identifier::{GlobalString, Identifier},
+    initialized_data::InitializedData,
+    inventory::Inventory,
+    items::{get_item_by_id, register_block_item, Item, COAL_IDENTIFIER},
+    scheduler::{schedule_task, Task},
+    screens::ContainerInventoryScreen,
+    serialization::{Buffer, Deserialize, SerializationError, Serialize},
+    world::{ChunkBlockMetadata, Direction, Vec2i, World},
+    GameConfig, RenderLayer, RENDER_LAYERS,
 };
 use lazy_static::lazy_static;
 use raylib::{
@@ -239,7 +251,7 @@ pub trait Block: BlockImplDetails {
         false
     }
     #[allow(unused_variables)]
-    fn interact(&self, meta: ChunkBlockMetadata, config: &mut GameConfig) {}
+    fn interact(&mut self, meta: ChunkBlockMetadata, config: &mut GameConfig) {}
     fn name(&self) -> GlobalString {
         *EMPTY_NAME
     }
@@ -386,7 +398,7 @@ impl Block for ResourceNodeBrown {
     fn supports_interaction(&self) -> bool {
         true
     }
-    fn interact(&self, _meta: ChunkBlockMetadata, config: &mut GameConfig) {
+    fn interact(&mut self, _meta: ChunkBlockMetadata, config: &mut GameConfig) {
         let mut item = get_item_by_id(*COAL_IDENTIFIER).unwrap().clone_item();
         item.set_metadata(8);
         if config.inventory.try_add_item(item).is_some() {
@@ -437,7 +449,7 @@ impl Block for StorageContainer {
     fn name(&self) -> GlobalString {
         *CONTAINER_NAME
     }
-    fn interact(&self, meta: ChunkBlockMetadata, _: &mut GameConfig) {
+    fn interact(&mut self, meta: ChunkBlockMetadata, _: &mut GameConfig) {
         schedule_task(Task::OpenScreenCentered(Box::new(
             ContainerInventoryScreen::new(
                 meta.position.x,
@@ -637,6 +649,34 @@ impl Default for ConveyorBlock {
 impl Block for ConveyorBlock {
     simple_single_item_serializable!(1);
 
+    fn interact(&mut self, meta: ChunkBlockMetadata, config: &mut GameConfig) {
+        match self.1.take_item(0) {
+            None => {
+                println!("Conveyor @ {:?} in {:?}: {:?} {:?}", meta.position, meta.direction, self.0, self.1)
+            }
+            Some(item) => {
+                if item.metadata() < 1 {
+                    return;
+                }
+                if let Some(item) = config.inventory.try_add_item(item) {
+                    self.1.get_item_mut(0).replace(item);
+                }
+            }
+        }
+    }
+
+    fn supports_interaction(&self) -> bool {
+        // self.1.get_item(0).is_some()
+        true
+    }
+
+    fn custom_interact_message(&self) -> Option<String> {
+        self.1
+            .get_item(0)
+            .as_ref()
+            .map(|item| format!("Grab {} from {}", item.name(), self.name()))
+    }
+
     fn identifier(&self) -> Identifier {
         *BLOCK_CONVEYOR
     }
@@ -733,6 +773,7 @@ impl Block for ConveyorBlock {
         if !self.can_do_work() {
             return;
         }
+        self.1.update();
         schedule_task(Task::WorldUpdateBlock(
             &|a, b| {
                 Self::update(a, b);
