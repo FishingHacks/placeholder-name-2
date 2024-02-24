@@ -7,7 +7,7 @@ use crate::{
     cstr, identifier::GlobalString, notice_board::{self, NoticeboardEntryRenderable}, scheduler::{schedule_task, Task}
 };
 
-use super::{escape_screen::EXIT_GAME, Screen, WorldScreen};
+use super::{OptionsScreen, Screen, WorldScreen};
 
 #[derive(Default)]
 pub struct MainScreen;
@@ -15,6 +15,7 @@ pub struct MainScreen;
 const OPEN_WORLD: &CStr = cstr!("Open World");
 const CREDITS: &CStr = cstr!("Credits");
 const OPTIONS: &CStr = cstr!("Options");
+const EXIT_GAME: &std::ffi::CStr = cstr!("Quit Game");
 
 lazy_static! {
     pub static ref NAME: GlobalString = GlobalString::from("Placeholder Name 2");
@@ -58,10 +59,12 @@ impl Screen for MainScreen {
         ) {
             schedule_task(Task::ExitGame);
         }
-        renderer.gui_button(
+        if renderer.gui_button(
             Rectangle::new((x + 390) as f32, (y + 296) as f32, 140.0, 48.0),
             Some(OPTIONS),
-        );
+        ) {
+            schedule_task(Task::OpenScreenCentered(OptionsScreen::new()));
+        }
     }
 
     fn name(&mut self) -> crate::identifier::GlobalString {

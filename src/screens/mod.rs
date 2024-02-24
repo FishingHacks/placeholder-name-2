@@ -1,25 +1,50 @@
 use std::{ffi::CStr, fmt::Display, sync::Mutex};
 
-use raylib::{drawing::RaylibDrawHandle, math::Rectangle, rgui::RaylibDrawGui};
+use raylib::{color::Color, drawing::RaylibDrawHandle, ffi::GuiControl, math::Rectangle, rgui::RaylibDrawGui};
 
-mod dialog_box;
-mod worlds_screen;
-mod save_game_screen;
-mod player_inventory_screen;
-mod escape_screen;
-mod selector_screen;
 mod container_inventory_screen;
+mod dialog_box;
+mod escape_screen;
 mod main_screen;
-pub use selector_screen::SelectorScreen;
-pub use escape_screen::EscapeScreen;
-pub use player_inventory_screen::PlayerInventoryScreen;
+mod options;
+mod player_inventory_screen;
+mod save_game_screen;
+mod selector_screen;
+mod worlds_screen;
 pub use container_inventory_screen::ContainerInventoryScreen;
-pub use main_screen::MainScreen;
-pub use save_game_screen::SavegameScreen;
-pub use worlds_screen::WorldScreen;
 pub use dialog_box::DialogBox;
+pub use escape_screen::EscapeScreen;
+pub use main_screen::MainScreen;
+pub use options::OptionsScreen;
+pub use player_inventory_screen::PlayerInventoryScreen;
+pub use save_game_screen::SavegameScreen;
+pub use selector_screen::SelectorScreen;
+pub use worlds_screen::WorldScreen;
 
-use crate::{identifier::GlobalString, scheduler::{schedule_task, Task}, world::World, GameConfig};
+use crate::{
+    identifier::GlobalString,
+    scheduler::{schedule_task, Task},
+    world::World,
+    GameConfig,
+};
+
+pub struct Colors {
+    border: Color,
+    bg: Color,
+    text: Color,
+}
+
+fn gui_get_style(control: GuiControl, property: i32) -> i32 {
+    unsafe { raylib::ffi::GuiGetStyle(control as i32, property as i32) }
+}
+
+pub fn get_colors() -> Colors {
+    Colors {
+        border: Color::get_color(gui_get_style(GuiControl::DEFAULT, 0)),
+        bg: Color::get_color(gui_get_style(GuiControl::DEFAULT, 1)),
+        text: Color::get_color(gui_get_style(GuiControl::DEFAULT, 2)),
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct ScreenDimensions {
@@ -33,10 +58,18 @@ impl Display for ScreenDimensions {
     }
 }
 
-
 trait Screen {
     fn rect(&mut self, screen: &ScreenDimensions) -> ScreenDimensions;
-    fn render(&mut self, cfg: &mut GameConfig, renderer: &mut RaylibDrawHandle, x: i32, y: i32, w: i32, h: i32, world: &mut World);
+    fn render(
+        &mut self,
+        cfg: &mut GameConfig,
+        renderer: &mut RaylibDrawHandle,
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+        world: &mut World,
+    );
     fn name(&mut self) -> GlobalString;
     fn close(&self) {
         schedule_task(Task::CloseScreen);
@@ -44,7 +77,15 @@ trait Screen {
 }
 
 pub trait GUIScreen: Send {
-    fn render(&mut self, cfg: &mut GameConfig, renderer: &mut RaylibDrawHandle, x: i32, y: i32, screen: &ScreenDimensions, world: &mut World);
+    fn render(
+        &mut self,
+        cfg: &mut GameConfig,
+        renderer: &mut RaylibDrawHandle,
+        x: i32,
+        y: i32,
+        screen: &ScreenDimensions,
+        world: &mut World,
+    );
     fn get_dimensions(&mut self, screen: &ScreenDimensions) -> ScreenDimensions;
     fn close_screen(&self) {
         schedule_task(Task::CloseScreen);
@@ -88,7 +129,15 @@ impl<T: Screen + Send> GUIScreen for T {
         Screen::name(self)
     }
 
-    fn render(&mut self, cfg: &mut GameConfig, renderer: &mut RaylibDrawHandle, x: i32, y: i32, screen: &ScreenDimensions, world: &mut World) {
+    fn render(
+        &mut self,
+        cfg: &mut GameConfig,
+        renderer: &mut RaylibDrawHandle,
+        x: i32,
+        y: i32,
+        screen: &ScreenDimensions,
+        world: &mut World,
+    ) {
         let ScreenDimensions { width, height } = self.rect(screen);
 
         let mut name = self.name().as_str().clone();
@@ -137,7 +186,12 @@ impl CurrentScreen {
         move_screen(x, y);
     }
 
-    pub fn render(cfg: &mut GameConfig, renderer: &mut RaylibDrawHandle, screen: &ScreenDimensions, world: &mut World) {
+    pub fn render(
+        cfg: &mut GameConfig,
+        renderer: &mut RaylibDrawHandle,
+        screen: &ScreenDimensions,
+        world: &mut World,
+    ) {
         let mut sc = CURRENT_SCREEN.lock().unwrap();
         let x = sc.1;
         let y = sc.2;

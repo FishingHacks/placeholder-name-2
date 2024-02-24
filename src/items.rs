@@ -29,6 +29,7 @@ pub trait Item: Send + Sync {
     fn metadata_is_stack_size(&self) -> bool {
         true
     }
+    fn description(&self) -> &'static str;
     fn render(&self, renderer: &mut RaylibDrawHandle, x: i32, y: i32, w: i32, h: i32);
     fn set_metadata(&mut self, new_data: u32);
     fn serialize(&self, vec: &mut Vec<u8>);
@@ -68,6 +69,9 @@ pub struct ItemCoal(u32);
 
 impl Item for ItemCoal {
     empty_serializable!();
+    fn description(&self) -> &'static str {
+        "Coal is most commonly used as a fuel for generators"
+    }
     fn clone_item(&self) -> Box<dyn Item> {
         Box::new(Self(self.0))
     }
@@ -99,6 +103,9 @@ pub struct BlockItem(u32, Box<dyn Block>);
 impl Item for BlockItem {
     empty_serializable!();
 
+    fn description(&self) -> &'static str {
+        self.1.description()
+    }
     fn clone_item(&self) -> Box<dyn Item> {
         Box::new(Self(self.0, self.1.clone_block()))
     }

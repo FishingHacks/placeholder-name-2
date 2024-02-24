@@ -1,10 +1,10 @@
 use raylib::{
-    color::Color, drawing::RaylibDraw, math::Rectangle, rgui::RaylibDrawGui, text::measure_text,
+    color::Color, drawing::RaylibDraw, ffi::GuiControl, math::Rectangle, rgui::RaylibDrawGui, text::measure_text
 };
 
 use crate::{identifier::GlobalString, inventory::NUM_SLOTS_PLAYER, world::World};
 
-use super::{CurrentScreen, Screen};
+use super::{player_inventory_screen::tooltip, CurrentScreen, Screen};
 
 #[derive(Default)]
 pub struct ContainerInventoryScreen {
@@ -20,9 +20,6 @@ const ITEM_H: u32 = 40;
 const BUTTON_PAD: u32 = 7;
 const BUTTON_MARGIN: u32 = 10;
 const BUTTONS_PER_ROW: u32 = 5;
-
-const BORDER_PRESSED: Color = Color::new(0x04, 0x92, 0xc7, 0xff);
-const BUTTON_PRESSED: Color = Color::new(0x97, 0xe8, 0xff, 0xff);
 
 impl ContainerInventoryScreen {
     pub fn new(pos_x: i32, pos_y: i32, num_slots: u32, name: GlobalString) -> Self {
@@ -70,10 +67,16 @@ impl Screen for ContainerInventoryScreen {
         _: i32,
         world: &mut World,
     ) {
+        let border_pressed = Color::get_color(renderer.gui_get_style(GuiControl::DEFAULT, 3));
+        let button_pressed = Color::get_color(renderer.gui_get_style(GuiControl::DEFAULT, 4));
+
         let mut switch_slots = ((0, false), (0, false));
         let inventory = some_or_close_screen!(world
             .get_block_at_mut(self.pos_x, self.pos_y)
             .and_then(|block| block.0.get_inventory_capability()));
+
+        let mut idx: Option<(usize, bool)> = None;
+        let pos = renderer.get_mouse_position();
 
         for slot in 0..inventory.size() {
             let item = inventory.get_item(slot);
@@ -83,6 +86,18 @@ impl Screen for ContainerInventoryScreen {
                 x + (BUTTON_MARGIN + row * (BUTTON_MARGIN * 2 + BUTTON_PAD * 2 + ITEM_W)) as i32;
             let y =
                 y + (BUTTON_MARGIN + col * (BUTTON_MARGIN * 2 + BUTTON_PAD * 2 + ITEM_H)) as i32;
+
+            if idx.is_none()
+                && Rectangle::new(
+                    x as f32,
+                    y as f32,
+                    (ITEM_W + BUTTON_PAD * 2) as f32,
+                    (ITEM_H + BUTTON_PAD * 2) as f32,
+                )
+                .check_collision_point_rec(pos)
+            {
+                idx = Some((slot, false));
+            }
 
             if renderer.gui_button(
                 Rectangle::new(
@@ -119,7 +134,7 @@ impl Screen for ContainerInventoryScreen {
                     y,
                     (BUTTON_PAD * 2 + ITEM_W) as i32,
                     (BUTTON_PAD * 2 + ITEM_H) as i32,
-                    BUTTON_PRESSED,
+                    button_pressed,
                 );
                 renderer.draw_rectangle_lines_ex(
                     Rectangle::new(
@@ -129,7 +144,7 @@ impl Screen for ContainerInventoryScreen {
                         (BUTTON_PAD * 2 + ITEM_H) as f32,
                     ),
                     2,
-                    BORDER_PRESSED,
+                    border_pressed,
                 );
             }
 
@@ -177,6 +192,18 @@ impl Screen for ContainerInventoryScreen {
             let y =
                 y + (BUTTON_MARGIN + col * (BUTTON_MARGIN * 2 + BUTTON_PAD * 2 + ITEM_H)) as i32;
 
+            if idx.is_none()
+                && Rectangle::new(
+                    x as f32,
+                    y as f32,
+                    (ITEM_W + BUTTON_PAD * 2) as f32,
+                    (ITEM_H + BUTTON_PAD * 2) as f32,
+                )
+                .check_collision_point_rec(pos)
+            {
+                idx = Some((slot, true));
+            }
+
             if renderer.gui_button(
                 Rectangle::new(
                     x as f32,
@@ -212,7 +239,7 @@ impl Screen for ContainerInventoryScreen {
                     y,
                     (BUTTON_PAD * 2 + ITEM_W) as i32,
                     (BUTTON_PAD * 2 + ITEM_H) as i32,
-                    BUTTON_PRESSED,
+                    button_pressed,
                 );
                 renderer.draw_rectangle_lines_ex(
                     Rectangle::new(
@@ -222,7 +249,7 @@ impl Screen for ContainerInventoryScreen {
                         (BUTTON_PAD * 2 + ITEM_H) as f32,
                     ),
                     2,
-                    BORDER_PRESSED,
+                    border_pressed,
                 );
             }
 
@@ -292,6 +319,17 @@ impl Screen for ContainerInventoryScreen {
                         inventory.add_item(item_a, switch_slots.1 .0);
                     };
                 }
+            }
+        }
+
+        if let Some((slot, player_inv)) = idx {
+            let item = if player_inv {
+                cfg.inventory.get_item(slot)
+            } else {
+                inventory.get_item(slot)
+            };
+            if let Some(item) = item {
+                tooltip(item, renderer);
             }
         }
     }

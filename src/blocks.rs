@@ -218,8 +218,12 @@ macro_rules! simple_single_item_serializable {
 }
 
 pub trait Block: BlockImplDetails {
+    fn is_none(&self) -> bool {
+        false
+    }
     #[allow(unused_variables)]
     fn init(&mut self, meta: ChunkBlockMetadata) {}
+    fn description(&self) -> &'static str;
     fn render(
         &self,
         d: &mut RaylibDrawHandle,
@@ -307,6 +311,9 @@ pub trait Block: BlockImplDetails {
 block_impl_details!(default EmptyBlock);
 impl Block for EmptyBlock {
     empty_serializable!();
+    fn is_none(&self) -> bool {
+        true
+    }
     fn render(
         &self,
         d: &mut RaylibDrawHandle,
@@ -319,48 +326,11 @@ impl Block for EmptyBlock {
     ) {
         d.draw_rectangle_lines(x, y, w, h, Color::GRAY);
     }
+    fn description(&self) -> &'static str {
+        "*scared* wh- why can u see me :tbhcry:"
+    }
     fn identifier(&self) -> Identifier {
         *BLOCK_EMPTY
-    }
-}
-
-block_impl_details!(default ResourceNodeGreen);
-impl Block for ResourceNodeGreen {
-    empty_serializable!();
-    fn render(
-        &self,
-        d: &mut RaylibDrawHandle,
-        sc_x: i32,
-        sc_y: i32,
-        sc_w: i32,
-        sc_h: i32,
-        _meta: ChunkBlockMetadata,
-        _layer: RenderLayer,
-    ) {
-        d.draw_rectangle(sc_x, sc_y, sc_w, sc_h, Color::GREEN)
-    }
-    fn identifier(&self) -> Identifier {
-        *BLOCK_RESOURCE_NODE_GREEN
-    }
-}
-
-block_impl_details!(default ResourceNodeBlue);
-impl Block for ResourceNodeBlue {
-    empty_serializable!();
-    fn render(
-        &self,
-        d: &mut RaylibDrawHandle,
-        sc_x: i32,
-        sc_y: i32,
-        sc_w: i32,
-        sc_h: i32,
-        _meta: ChunkBlockMetadata,
-        _layer: RenderLayer,
-    ) {
-        d.draw_rectangle(sc_x, sc_y, sc_w, sc_h, Color::BLUE)
-    }
-    fn identifier(&self) -> Identifier {
-        *BLOCK_RESOURCE_NODE_BLUE
     }
 }
 
@@ -422,6 +392,9 @@ impl Block for ResourceNodeBrown {
         item.set_metadata(1);
         Some(item)
     }
+    fn description(&self) -> &'static str {
+        "An Ore Node to extract coal from"
+    }
 }
 
 block_impl_details!(StorageContainer, Inventory);
@@ -433,6 +406,10 @@ impl Default for StorageContainer {
 }
 
 impl Block for StorageContainer {
+    fn description(&self) -> &'static str {
+        "A 5x9 Container able to hold a total of 11475 items"
+    }
+
     fn serialize(&self, buf: &mut Vec<u8>) {
         self.0.serialize(buf);
     }
@@ -521,6 +498,10 @@ impl Default for ExtractorBlock {
 }
 impl Block for ExtractorBlock {
     simple_single_item_serializable!(1);
+
+    fn description(&self) -> &'static str {
+        "Extracts 4 Blocks per second from a machine"
+    }
 
     fn identifier(&self) -> Identifier {
         *BLOCK_EXTRACTOR
@@ -640,20 +621,23 @@ impl ExtractorBlock {
     }
 }
 
-block_impl_details_with_timer!(ConveyorBlock, 250, Inventory);
+block_impl_details_with_timer!(ConveyorBlock, 1000, Inventory);
 impl Default for ConveyorBlock {
     fn default() -> Self {
         Self(Instant::now(), Inventory::new(1, false))
     }
 }
+
 impl Block for ConveyorBlock {
     simple_single_item_serializable!(1);
 
-    fn interact(&mut self, meta: ChunkBlockMetadata, config: &mut GameConfig) {
+    fn description(&self) -> &'static str {
+        "Moves 60 items per minute"
+    }
+
+    fn interact(&mut self, _: ChunkBlockMetadata, config: &mut GameConfig) {
         match self.1.take_item(0) {
-            None => {
-                println!("Conveyor @ {:?} in {:?}: {:?} {:?}", meta.position, meta.direction, self.0, self.1)
-            }
+            None => {}
             Some(item) => {
                 if item.metadata() < 1 {
                     return;
@@ -666,8 +650,7 @@ impl Block for ConveyorBlock {
     }
 
     fn supports_interaction(&self) -> bool {
-        // self.1.get_item(0).is_some()
-        true
+        self.1.get_item(0).is_some()
     }
 
     fn custom_interact_message(&self) -> Option<String> {
@@ -694,30 +677,6 @@ impl Block for ConveyorBlock {
         layer: RenderLayer,
     ) {
         if layer == RenderLayer::Block {
-            // d.draw_rectangle(x, y, w, h, Color::GRAY);
-            // let (vec_1, vec_2, vec_3) = match meta.direction {
-            //     Direction::North => (
-            //         Vector2::new((x + 5) as f32, (y + h) as f32),
-            //         Vector2::new((x + w - 5) as f32, (y + h) as f32),
-            //         Vector2::new((x + w / 2) as f32, (y + h - w / 2) as f32),
-            //     ),
-            //     Direction::South => (
-            //         Vector2::new((x + w - 5) as f32, y as f32),
-            //         Vector2::new((x + 5) as f32, y as f32),
-            //         Vector2::new((x + w / 2) as f32, (y + w / 2) as f32),
-            //     ),
-            //     Direction::East => (
-            //         Vector2::new((x + w) as f32, (y + h - 5) as f32),
-            //         Vector2::new((x + w) as f32, (y + 5) as f32),
-            //         Vector2::new((x + h / 2) as f32, (y + h / 2) as f32),
-            //     ),
-            //     Direction::West => (
-            //         Vector2::new(x as f32, (y + 5) as f32),
-            //         Vector2::new(x as f32, (y + h - 5) as f32),
-            //         Vector2::new((x + w - h / 2) as f32, (y + h / 2) as f32),
-            //     ),
-            // };
-            // d.draw_triangle(vec_1, vec_2, vec_3, Color::BLUE);
             CONVEYOR_ANIMATION.draw_resized_rotated(d, x, y, w, h, meta.direction);
         } else if layer == RenderLayer::OverlayItems {
             if let Some(item) = &self.1.get_item(0) {
@@ -817,6 +776,10 @@ impl Default for ConveyorSplitter {
 }
 impl Block for ConveyorSplitter {
     simple_single_item_serializable!(1);
+
+    fn description(&self) -> &'static str {
+        "Splits incoming items evenly between all 3 outputs using round robin at a rate of 5 per second"
+    }
 
     fn identifier(&self) -> Identifier {
         *BLOCK_CONVEYOR_MERGER
@@ -1016,8 +979,6 @@ pub static mut BLOCKS: Vec<Box<dyn Block>> = Vec::new();
 pub fn register_blocks() {
     register_blocks!(
         EmptyBlock,
-        ResourceNodeBlue,
-        ResourceNodeGreen,
         ResourceNodeBrown,
         StorageContainer,
         ExtractorBlock,

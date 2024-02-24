@@ -9,7 +9,6 @@ use std::{
 use crate::{
     blocks::{empty_block, get_block_by_id, Block, BLOCK_EMPTY},
     identifier::Identifier,
-    inventory::Inventory,
     items::{get_item_by_id, Item},
     world::World,
     GameConfig,
@@ -314,6 +313,7 @@ pub enum SerializationTrap {
     Chunk,
     World,
     Time,
+    GameCfg,
 
     Unknown = 0xff,
 }
@@ -366,6 +366,7 @@ impl SerializationTrap {
             6 => Self::Chunk,
             7 => Self::World,
             8 => Self::Time,
+            9 => Self::GameCfg,
             _ => Self::Unknown,
         }
     }
@@ -531,8 +532,8 @@ pub fn save_game(world: &World, cfg: &GameConfig, file: String) -> std::io::Resu
     // save world
     world.serialize(&mut buf);
 
-    // save player inventory
-    cfg.inventory.serialize(&mut buf);
+    // save config
+    cfg.serialize(&mut buf);
 
     let len = buf.len();
     println!("Save Size: {} bytes", len);
@@ -558,8 +559,7 @@ pub fn load_game(file: String) -> Result<(World, GameConfig, SystemTime), Serial
     let world = World::try_deserialize(&mut buf)?;
 
     // config
-    let mut config: GameConfig = GameConfig::default();
-    config.inventory = Inventory::try_deserialize(&mut buf)?;
+    let config = GameConfig::try_deserialize(&mut buf)?;
 
     if buf.len() > 0 {
         return Err(SerializationError::InvalidData);

@@ -618,6 +618,9 @@ impl Display for Vec2i {
 }
 
 impl Vec2i {
+    pub const ZERO: Vec2i = Vec2i { x: 0, y: 0 }; 
+    pub const ONE: Vec2i = Vec2i { x: 1, y: 1 }; 
+
     pub fn new(x: i32, y: i32) -> Self {
         Self { x, y }
     }
