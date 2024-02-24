@@ -3,14 +3,15 @@ use raylib::{drawing::RaylibDrawHandle, math::Rectangle, rgui::RaylibDrawGui};
 
 use crate::{cstr, identifier::GlobalString, scheduler::{schedule_task, Task}, GameConfig};
 
-use super::{Screen, ScreenDimensions};
+use super::{SavegameScreen, Screen, ScreenDimensions};
 
 pub struct EscapeScreen;
 
-const SCREEN_DIMENSIONS: ScreenDimensions = ScreenDimensions { width: 180, height: 20 /* top + bottom padding (10 px each) */ + 24 /* first button */ + 38 * 2 /* other buttons */ };
+const SCREEN_DIMENSIONS: ScreenDimensions = ScreenDimensions { width: 180, height: 20 /* top + bottom padding (10 px each) */ + 24 /* first button */ + 38 * 3 /* other buttons */ };
 
 pub const EXIT_GAME: &std::ffi::CStr = cstr!("Quit Game");
 const CLOSE_WORLD: &std::ffi::CStr = cstr!("Back to the Main Menu");
+const SAVE_GAME: &std::ffi::CStr = cstr!("Save Game");
 const RESUME: &std::ffi::CStr = cstr!("Resume");
 
 lazy_static! {
@@ -29,7 +30,10 @@ impl Screen for EscapeScreen {
         if renderer.gui_button(Rectangle::new((x + 10) as f32, (y + 10 + 38 * 1) as f32, 160.0, 24.0), Some(CLOSE_WORLD)) {
             schedule_task(Task::CloseWorld);
         }
-        if renderer.gui_button(Rectangle::new((x + 10) as f32, (y + 10 + 38 * 2) as f32, 160.0, 24.0), Some(EXIT_GAME)) {
+        if renderer.gui_button(Rectangle::new((x + 10) as f32, (y + 10 + 38 * 2) as f32, 160.0, 24.0), Some(SAVE_GAME)) {
+            schedule_task(Task::OpenScreenCentered(Box::new(SavegameScreen::default())))
+        }
+        if renderer.gui_button(Rectangle::new((x + 10) as f32, (y + 10 + 38 * 3) as f32, 160.0, 24.0), Some(EXIT_GAME)) {
             schedule_task(Task::ExitGame);
         }
     }

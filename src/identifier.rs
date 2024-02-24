@@ -1,5 +1,7 @@
 use std::fmt::{Debug, Display, Write};
 
+use crate::serialization::{Deserialize, Serialize};
+
 static mut GLOBAL_STRINGS: Vec<String> = Vec::new(); // used for identifiers (things that persist throughout the ENTIRE game); Yes, this is unsafe and not thread safe
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -70,11 +72,63 @@ impl Display for GlobalString {
     }
 }
 
+impl Serialize for GlobalString {
+    fn required_length(&self) -> usize {
+        self.as_str().required_length()
+    }
+
+    fn serialize(&self, buf: &mut Vec<u8>) {
+        self.as_str().serialize(buf)
+    }
+}
+
+impl Deserialize for GlobalString {
+    fn deserialize(buf: &mut crate::serialization::Buffer) -> Self {
+        Self::from(String::deserialize(buf))
+    }
+
+    fn try_deserialize(buf: &mut crate::serialization::Buffer) -> Result<Self, crate::serialization::SerializationError> {
+        Ok(Self::from(String::try_deserialize(buf)?))
+    }
+}
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub struct Identifier {
     major: GlobalString,
     minor: GlobalString,
+}
+
+impl Serialize for Identifier {
+    fn required_length(&self) -> usize {
+        self.major.required_length() + self.minor.required_length()
+    }
+
+    fn serialize(&self, buf: &mut Vec<u8>) {
+        self.major.serialize(buf);
+        self.minor.serialize(buf);
+    }
+}
+
+impl Deserialize for Identifier {
+    fn deserialize(buf: &mut crate::serialization::Buffer) -> Self {
+        let major = GlobalString::deserialize(buf);
+        let minor = GlobalString::deserialize(buf);
+        
+        Self {
+            minor,
+            major,
+        }
+    }
+
+    fn try_deserialize(buf: &mut crate::serialization::Buffer) -> Result<Self, crate::serialization::SerializationError> {
+        let major = GlobalString::try_deserialize(buf)?;
+        let minor = GlobalString::try_deserialize(buf)?;
+        
+        Ok(Self {
+            minor,
+            major,
+        })
+    }
 }
 
 impl Debug for Identifier {

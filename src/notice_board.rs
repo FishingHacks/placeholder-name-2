@@ -18,6 +18,7 @@ use crate::{
 
 pub enum NoticeboardEntryRenderable {
     String(String),
+    StringRef(&'static str),
     Block(Box<dyn Block>, Direction),
     NamedBlock(Box<dyn Block>, Direction),
     Item(Box<dyn Item>),
@@ -35,6 +36,12 @@ impl NoticeboardEntryRenderable {
                 let width = measure_text(str.as_str(), 20) + 10;
                 renderer.draw_rectangle(x, y, width, ENTRY_SIZE, Color::WHITE.fade(0.5));
                 renderer.draw_text(str.as_str(), x + 5, y + 5, 20, Color::BLACK);
+                width
+            }
+            Self::StringRef(str) => {
+                let width = measure_text(str, 20) + 10;
+                renderer.draw_rectangle(x, y, width, ENTRY_SIZE, Color::WHITE.fade(0.5));
+                renderer.draw_text(str, x + 5, y + 5, 20, Color::BLACK);
                 width
             }
             Self::Joiner(a, b) => {
@@ -169,8 +176,9 @@ pub const ENTRY_SIZE: i32 = 30;
 pub fn render_entries(renderer: &mut RaylibDrawHandle, h: i32, full_screen_height: i32) {
     let board = NOTICE_BOARD.lock().unwrap();
 
-    for i in 0..board.len().min((h / (ENTRY_SIZE + 5)).max(0) as usize) {
-        board[i].contents.render(
+    let max_entries = board.len().min((h / (ENTRY_SIZE + 5)).max(0) as usize) + 1;
+    for i in 1..max_entries {
+        board[board.len() - i].contents.render(
             10,
             full_screen_height - i as i32 * (ENTRY_SIZE + 5) - ENTRY_SIZE - 10,
             renderer,

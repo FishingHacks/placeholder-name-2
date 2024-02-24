@@ -7,11 +7,14 @@ use std::{
 
 use crate::{
     blocks::{empty_block, Block},
-    identifier::Identifier, RenderLayer,
+    identifier::Identifier,
+    serialization::{Buffer, Deserialize, SerializationError, SerializationTrap, Serialize},
+    RenderLayer,
 };
 
+#[derive(Clone)]
 pub struct World {
-    pub loaded_chunks: HashMap<(i32, i32), Chunk>,
+    pub chunks: HashMap<(i32, i32), Chunk>,
     pub w: u32,
     pub h: u32,
     pub startx: i32,
@@ -20,7 +23,7 @@ pub struct World {
 
 impl World {
     pub fn load_chunk(&mut self, x: i32, y: i32) {
-        self.loaded_chunks.insert((x, y), Chunk::default(x, y));
+        self.chunks.insert((x, y), Chunk::default(x, y));
     }
 
     pub fn get_block_at<'a>(
@@ -37,10 +40,7 @@ impl World {
         if (y % BLOCKS_PER_CHUNK_Y as i32) < 0 {
             chunk_y -= 1;
         }
-        let blk = self
-            .loaded_chunks
-            .get(&(chunk_x, chunk_y))?
-            .get_block_at(x, y);
+        let blk = self.chunks.get(&(chunk_x, chunk_y))?.get_block_at(x, y);
         Some((&blk.inner, blk.data))
     }
 
@@ -59,7 +59,7 @@ impl World {
             chunk_y -= 1;
         }
         let blk = self
-            .loaded_chunks
+            .chunks
             .get_mut(&(chunk_x, chunk_y))?
             .get_block_at_mut(x, y);
         Some((&mut blk.inner, blk.data))
@@ -76,7 +76,7 @@ impl World {
             chunk_y -= 1;
         }
 
-        if let Some(chunk) = self.loaded_chunks.get_mut(&(chunk_x, chunk_y)) {
+        if let Some(chunk) = self.chunks.get_mut(&(chunk_x, chunk_y)) {
             chunk.set_block_at(x, y, block, dir);
             true
         } else {
@@ -89,7 +89,7 @@ impl World {
         let off_y = -((h / 2) as i32);
 
         let mut world = Self {
-            loaded_chunks: HashMap::with_capacity(w as usize * h as usize),
+            chunks: HashMap::with_capacity(w as usize * h as usize),
             startx: off_x,
             starty: off_y,
             w,
@@ -106,18 +106,26 @@ impl World {
     }
 
     pub fn init(&mut self) {
-        for (_, chunk) in self.loaded_chunks.iter_mut() {
+        for (_, chunk) in self.chunks.iter_mut() {
             chunk.init();
         }
     }
 
     pub fn update(&mut self) {
-        for (_, chunk) in self.loaded_chunks.iter_mut() {
+        for (_, chunk) in self.chunks.iter_mut() {
             chunk.update();
         }
     }
 
-    pub fn render(&mut self, d: &mut RaylibDrawHandle, x: i32, y: i32, w: u32, h: u32, layer: RenderLayer) {
+    pub fn render(
+        &mut self,
+        d: &mut RaylibDrawHandle,
+        x: i32,
+        y: i32,
+        w: u32,
+        h: u32,
+        layer: RenderLayer,
+    ) {
         let first_chunk_x = 0.max((x.wrapping_div(CHUNK_W as i32)) - self.startx - 1) as u32;
         let first_chunk_y = 0.max((y.wrapping_div(CHUNK_H as i32)) - self.starty - 1) as u32;
 
@@ -135,11 +143,106 @@ impl World {
                 let sc_x = chunk_x * CHUNK_W as i32 - x;
                 let sc_y = chunk_y * CHUNK_H as i32 - y;
 
-                if let Some(chunk) = self.loaded_chunks.get_mut(&(chunk_x, chunk_y)) {
+                if let Some(chunk) = self.chunks.get_mut(&(chunk_x, chunk_y)) {
                     chunk.render(d, sc_x, sc_y, CHUNK_W, CHUNK_H, BLOCK_W, BLOCK_H, layer);
                 }
             }
         }
+    }
+}
+
+impl Serialize for World {
+    fn required_length(&self) -> usize {
+        // self.chunks.required_length()
+        self.chunks
+            .values()
+            .map(|chunk| chunk.required_length())
+            .reduce(|a, b| a + b)
+            .unwrap_or_default()
+            + self.w.required_length()
+            + self.h.required_length()
+            + self.startx.required_length()
+            + self.starty.required_length()
+            + SerializationTrap::World.required_length()
+    }
+
+    fn serialize(&self, buf: &mut Vec<u8>) {
+        SerializationTrap::World.serialize(buf);
+        self.startx.serialize(buf);
+        self.starty.serialize(buf);
+        self.w.serialize(buf);
+        self.h.serialize(buf);
+        // self.chunks.serialize(buf);
+        assert_eq!(self.w as usize * self.h as usize, self.chunks.len());
+        let mut vals = self
+            .chunks
+            .iter()
+            .map(|(&(a, b), chunk)| {
+                (
+                    (a + self.startx.abs()) as usize
+                        + (b + self.startx.abs()) as usize * self.w as usize,
+                    chunk,
+                )
+            })
+            .collect::<Vec<(usize, &Chunk)>>();
+        vals.sort_by(|a, b| a.0.cmp(&b.0));
+        for (_, chunk) in vals {
+            chunk.serialize(buf);
+        }
+    }
+}
+
+impl Deserialize for World {
+    fn deserialize(buf: &mut Buffer) -> Self {
+        SerializationTrap::World.deserialize(buf);
+        let startx = i32::deserialize(buf);
+        let starty = i32::deserialize(buf);
+        let w = u32::deserialize(buf);
+        let h = u32::deserialize(buf);
+
+        let num_chunks = w as usize * h as usize;
+        let mut chunks = HashMap::with_capacity(num_chunks);
+
+        for i in 0..(w as usize * h as usize) {
+            let x = (i % w as usize) as i32 + startx;
+            let y = (i / w as usize) as i32 + starty;
+
+            chunks.insert((x, y), Chunk::deserialize(buf));
+        }
+
+        Self {
+            chunks,
+            startx,
+            starty,
+            w,
+            h,
+        }
+    }
+
+    fn try_deserialize(buf: &mut Buffer) -> Result<Self, SerializationError> {
+        SerializationTrap::World.try_deserialize(buf)?;
+        let startx = i32::try_deserialize(buf)?;
+        let starty = i32::try_deserialize(buf)?;
+        let w = u32::try_deserialize(buf)?;
+        let h = u32::try_deserialize(buf)?;
+        
+        let num_chunks = w as usize * h as usize;
+        let mut chunks = HashMap::with_capacity(num_chunks);
+
+        for i in 0..(w as usize * h as usize) {
+            let x = (i % w as usize) as i32 + startx;
+            let y = (i / w as usize) as i32 + starty;
+
+            chunks.insert((x, y), Chunk::try_deserialize(buf)?);
+        }
+
+        Ok(Self {
+            chunks,
+            startx,
+            starty,
+            w,
+            h,
+        })
     }
 }
 
@@ -271,6 +374,88 @@ impl Chunk {
     }
 }
 
+impl Serialize for Chunk {
+    fn required_length(&self) -> usize {
+        SerializationTrap::Chunk.required_length()
+            + self.chunk_x.required_length()
+            + self.chunk_y.required_length()
+            + self
+                .blocks
+                .iter()
+                .map(|blk| blk.inner.required_length() + blk.data.direction.required_length())
+                .reduce(|a, b| a + b)
+                .unwrap_or_default()
+            + usize::required_length(&0)
+    }
+
+    fn serialize(&self, buf: &mut Vec<u8>) {
+        SerializationTrap::Chunk.serialize(buf);
+        self.chunk_x.serialize(buf);
+        self.chunk_y.serialize(buf);
+        self.blocks.len().serialize(buf);
+        for b in &self.blocks {
+            b.data.direction.serialize(buf);
+            b.inner.serialize(buf);
+        }
+    }
+}
+
+impl Deserialize for Chunk {
+    fn deserialize(buf: &mut Buffer) -> Self {
+        SerializationTrap::Chunk.deserialize(buf);
+        let chunk_x = i32::deserialize(buf);
+        let chunk_y = i32::deserialize(buf);
+        let num_blocks = usize::deserialize(buf);
+        let mut blocks: Vec<ChunkBlock> = Vec::with_capacity(num_blocks);
+        for i in 0..num_blocks {
+            let direction = Direction::deserialize(buf);
+            let inner = <Box<dyn Block>>::deserialize(buf);
+            blocks.push(ChunkBlock {
+                inner,
+                data: ChunkBlockMetadata {
+                    direction,
+                    position: Vec2i::new(
+                        (i as u32 % BLOCKS_PER_CHUNK_X) as i32,
+                        (i as u32 / BLOCKS_PER_CHUNK_X) as i32,
+                    ),
+                },
+            });
+        }
+        Self {
+            blocks,
+            chunk_x,
+            chunk_y,
+        }
+    }
+
+    fn try_deserialize(buf: &mut Buffer) -> Result<Self, SerializationError> {
+        SerializationTrap::Chunk.try_deserialize(buf)?;
+        let chunk_x = i32::try_deserialize(buf)?;
+        let chunk_y = i32::try_deserialize(buf)?;
+        let num_blocks = usize::try_deserialize(buf)?;
+        let mut blocks: Vec<ChunkBlock> = Vec::with_capacity(num_blocks);
+        for i in 0..num_blocks {
+            let direction = Direction::try_deserialize(buf)?;
+            let inner = <Box<dyn Block>>::try_deserialize(buf)?;
+            blocks.push(ChunkBlock {
+                inner,
+                data: ChunkBlockMetadata {
+                    direction,
+                    position: Vec2i::new(
+                        (i as u32 % BLOCKS_PER_CHUNK_X) as i32,
+                        (i as u32 / BLOCKS_PER_CHUNK_X) as i32,
+                    ),
+                },
+            });
+        }
+        Ok(Self {
+            blocks,
+            chunk_x,
+            chunk_y,
+        })
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Direction {
     #[default]
@@ -278,6 +463,24 @@ pub enum Direction {
     East,
     South,
     West,
+}
+
+impl Serialize for Direction {
+    fn required_length(&self) -> usize {
+        1
+    }
+    fn serialize(&self, buf: &mut Vec<u8>) {
+        (*self as u8).serialize(buf)
+    }
+}
+
+impl Deserialize for Direction {
+    fn deserialize(buf: &mut Buffer) -> Self {
+        Self::from(u8::deserialize(buf))
+    }
+    fn try_deserialize(buf: &mut Buffer) -> Result<Self, SerializationError> {
+        Ok(Self::from(u8::try_deserialize(buf)?))
+    }
 }
 
 impl From<u8> for Direction {
@@ -328,6 +531,46 @@ impl Direction {
 pub struct Vec2i {
     pub x: i32,
     pub y: i32,
+}
+
+impl Serialize for Vec2i {
+    fn required_length(&self) -> usize {
+        self.x.required_length()
+            + self.y.required_length()
+            + usize::required_length(&0)
+            + SerializationTrap::Vec.required_length()
+    }
+
+    fn serialize(&self, buf: &mut Vec<u8>) {
+        SerializationTrap::Vec.serialize(buf);
+        usize::serialize(&2, buf);
+        self.x.serialize(buf);
+        self.y.serialize(buf);
+    }
+}
+
+impl Deserialize for Vec2i {
+    fn deserialize(buf: &mut Buffer) -> Self {
+        SerializationTrap::Vec.deserialize(buf);
+        let len = usize::deserialize(buf);
+        if len != 2 {
+            panic!("Vec2i: Expected a vector length of 2");
+        }
+        let x = i32::deserialize(buf);
+        let y = i32::deserialize(buf);
+        Self { x, y }
+    }
+
+    fn try_deserialize(buf: &mut Buffer) -> Result<Self, SerializationError> {
+        SerializationTrap::Vec.try_deserialize(buf)?;
+        let len = usize::try_deserialize(buf)?;
+        if len != 2 {
+            return Err(SerializationError::InvalidData);
+        }
+        let x = i32::try_deserialize(buf)?;
+        let y = i32::try_deserialize(buf)?;
+        Ok(Self { x, y })
+    }
 }
 
 impl Add for Vec2i {
@@ -411,9 +654,67 @@ impl From<Direction> for ChunkBlockMetadata {
     }
 }
 
+impl Serialize for ChunkBlockMetadata {
+    fn required_length(&self) -> usize {
+        self.position.required_length() + self.direction.required_length()
+    }
+
+    fn serialize(&self, buf: &mut Vec<u8>) {
+        self.position.serialize(buf);
+        self.direction.serialize(buf);
+    }
+}
+
+impl Deserialize for ChunkBlockMetadata {
+    fn deserialize(buf: &mut Buffer) -> Self {
+        let position = Vec2i::deserialize(buf);
+        let direction = Direction::deserialize(buf);
+
+        Self {
+            position,
+            direction,
+        }
+    }
+
+    fn try_deserialize(buf: &mut Buffer) -> Result<Self, SerializationError> {
+        let position = Vec2i::try_deserialize(buf)?;
+        let direction = Direction::try_deserialize(buf)?;
+
+        Ok(Self {
+            position,
+            direction,
+        })
+    }
+}
+
 pub struct ChunkBlock {
     inner: Box<dyn Block>,
     data: ChunkBlockMetadata,
+}
+
+impl Serialize for ChunkBlock {
+    fn required_length(&self) -> usize {
+        self.inner.required_length() + self.data.required_length()
+    }
+
+    fn serialize(&self, buf: &mut Vec<u8>) {
+        self.data.serialize(buf);
+        self.inner.serialize(buf);
+    }
+}
+
+impl Deserialize for ChunkBlock {
+    fn deserialize(buf: &mut Buffer) -> Self {
+        let data = ChunkBlockMetadata::deserialize(buf);
+        let inner = <Box<dyn Block>>::deserialize(buf);
+        Self { data, inner }
+    }
+
+    fn try_deserialize(buf: &mut Buffer) -> Result<Self, SerializationError> {
+        let data = ChunkBlockMetadata::try_deserialize(buf)?;
+        let inner = <Box<dyn Block>>::try_deserialize(buf)?;
+        Ok(Self { data, inner })
+    }
 }
 
 impl ChunkBlock {
@@ -429,7 +730,15 @@ impl ChunkBlock {
     pub fn init(&mut self) {
         self.inner.init(self.data);
     }
-    pub fn render(&self, d: &mut RaylibDrawHandle, x: i32, y: i32, w: i32, h: i32, layer: RenderLayer) {
+    pub fn render(
+        &self,
+        d: &mut RaylibDrawHandle,
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+        layer: RenderLayer,
+    ) {
         self.inner.render(d, x, y, w, h, self.data, layer)
     }
     pub fn identifier(&self) -> Identifier {

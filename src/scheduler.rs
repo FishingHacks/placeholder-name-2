@@ -9,7 +9,8 @@ pub enum Task {
     CloseScreen,
     WorldUpdateBlock(&'static (dyn Fn(ChunkBlockMetadata, &mut World) -> () + Sync), ChunkBlockMetadata),
     CloseWorld,
-    OpenWorld,
+    OpenWorld(String),
+    CreateWorld,
 }
 
 static TASKS: Mutex<Vec<Task>> = Mutex::new(Vec::new());

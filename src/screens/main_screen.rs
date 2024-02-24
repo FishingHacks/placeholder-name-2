@@ -4,13 +4,12 @@ use lazy_static::lazy_static;
 use raylib::{math::Rectangle, rgui::RaylibDrawGui};
 
 use crate::{
-    cstr,
-    identifier::GlobalString,
-    scheduler::{schedule_task, Task},
+    cstr, identifier::GlobalString, notice_board::{self, NoticeboardEntryRenderable}, scheduler::{schedule_task, Task}
 };
 
-use super::{escape_screen::EXIT_GAME, Screen};
+use super::{escape_screen::EXIT_GAME, Screen, WorldScreen};
 
+#[derive(Default)]
 pub struct MainScreen;
 
 const OPEN_WORLD: &CStr = cstr!("Open World");
@@ -43,7 +42,10 @@ impl Screen for MainScreen {
             Rectangle::new((x + 202) as f32, (y + 104) as f32, 328.0, 48.0),
             Some(OPEN_WORLD),
         ) {
-            schedule_task(Task::OpenWorld);
+            match WorldScreen::new() {
+                Ok(sc) => schedule_task(Task::OpenScreenCentered(sc)),
+                Err(e) => notice_board::add_entry(NoticeboardEntryRenderable::String(format!("Could not read worlds dir: {e:?}")), 5),
+            }
         }
 
         renderer.gui_button(

@@ -9,7 +9,9 @@ use raylib::{
 use crate::{
     blocks::Block,
     identifier::{GlobalString, Identifier},
-    world::{ChunkBlockMetadata, Direction}, RenderLayer,
+    serialization::{Buffer, SerializationError},
+    world::{ChunkBlockMetadata, Direction},
+    RenderLayer,
 };
 
 impl Clone for Box<dyn Item> {
@@ -29,6 +31,9 @@ pub trait Item: Send + Sync {
     }
     fn render(&self, renderer: &mut RaylibDrawHandle, x: i32, y: i32, w: i32, h: i32);
     fn set_metadata(&mut self, new_data: u32);
+    fn serialize(&self, vec: &mut Vec<u8>);
+    fn try_deserialize(&mut self, buf: &mut Buffer) -> Result<(), SerializationError>;
+    fn required_length(&self) -> usize;
 }
 
 impl Debug for dyn Item {
@@ -51,9 +56,18 @@ lazy_static! {
     pub static ref COAL_NAME: GlobalString = GlobalString::from("Coal");
 }
 
+macro_rules! empty_serializable {
+    () => {
+        fn serialize(&self, _: &mut Vec<u8>) {}
+        fn try_deserialize(&mut self, _: &mut Buffer) -> Result<(), SerializationError> {Ok(())}
+        fn required_length(&self) -> usize {0}
+    };
+}
+
 pub struct ItemCoal(u32);
 
 impl Item for ItemCoal {
+    empty_serializable!();
     fn clone_item(&self) -> Box<dyn Item> {
         Box::new(Self(self.0))
     }
@@ -83,6 +97,8 @@ impl Item for ItemCoal {
 pub struct BlockItem(u32, Box<dyn Block>);
 
 impl Item for BlockItem {
+    empty_serializable!();
+
     fn clone_item(&self) -> Box<dyn Item> {
         Box::new(Self(self.0, self.1.clone_block()))
     }
@@ -133,9 +149,9 @@ pub fn register_block_item(block: Box<dyn Block>) {
 
 pub fn get_item_by_id(id: Identifier) -> Option<&'static Box<dyn Item>> {
     unsafe {
-        for blk in &ITEMS {
-            if blk.identifier() == id {
-                return Some(blk);
+        for item in &ITEMS {
+            if item.identifier() == id {
+                return Some(item);
             }
         }
     }

@@ -1,31 +1,36 @@
 use std::{sync::Mutex, time::Instant};
 
+use assets::update_textures;
 use blocks::{
-    empty_block, get_block_by_id, register_blocks, Block, BLOCK_EMPTY, BLOCK_RESOURCE_NODE_BLUE,
+    empty_block, get_block_by_id, load_block_files, register_blocks, Block, BLOCK_EMPTY,
+    BLOCK_RESOURCE_NODE_BLUE,
 };
 use inventory::{Inventory, NUM_SLOTS_PLAYER};
 use items::register_items;
+use notice_board::NoticeboardEntryRenderable;
 use raylib::{
-    color::Color,
-    drawing::RaylibDraw,
-    math::{Rectangle, Vector2},
-    RaylibHandle,
+    color::Color, drawing::RaylibDraw, ffi::KeyboardKey, math::{Rectangle, Vector2}, RaylibHandle
 };
 use scheduler::{get_tasks, schedule_task, Task};
 use screens::{
     close_screen, CurrentScreen, EscapeScreen, MainScreen, PlayerInventoryScreen, ScreenDimensions,
     SelectorScreen,
 };
+use serialization::load_game;
 use world::{ChunkBlockMetadata, Direction, World, BLOCK_H, BLOCK_W};
 
 pub mod as_any;
+pub mod assets;
 pub mod blocks;
 pub mod identifier;
+pub mod initialized_data;
 mod inventory;
 pub mod items;
 pub mod notice_board;
 pub mod scheduler;
 mod screens;
+pub mod serialization;
+pub mod ui;
 mod world;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,6 +67,7 @@ fn make_abs(val: i32) -> u32 {
     }
 }
 
+#[derive(Clone)]
 pub struct GameConfig {
     current_selected_block: &'static Box<dyn Block>,
     direction: Direction,
@@ -82,26 +88,30 @@ impl GameConfig {
 pub const TPS: u32 = 20;
 pub const MSPT: u128 = (1000 / TPS) as u128;
 
-#[derive(Clone, Copy)]
 pub enum RenderFn {
     None,
-    Game,
+    Game(World, GameConfig),
     StartMenu,
+}
+
+impl RenderFn {
+    pub fn take(&mut self) -> Self {
+        std::mem::replace(self, Self::None)
+    }
 }
 
 static RENDER_STEP: Mutex<RenderFn> = Mutex::new(RenderFn::StartMenu);
 
-fn run_game(rl: &mut RaylibHandle, thread: &raylib::prelude::RaylibThread) {
-    rl.set_exit_key(None);
-
-    let mut world = World::new(20, 20);
-
+fn run_game(
+    rl: &mut RaylibHandle,
+    thread: &raylib::prelude::RaylibThread,
+    mut world: World,
+    mut config: GameConfig,
+) {
     world.init();
 
     let mut player_x: i32 = 0;
     let mut player_y: i32 = 0;
-
-    let mut config = GameConfig::default();
 
     let mut last_update = Instant::now();
     let mut ticks_per_second = 20;
@@ -113,6 +123,8 @@ fn run_game(rl: &mut RaylibHandle, thread: &raylib::prelude::RaylibThread) {
     };
 
     while !rl.window_should_close() {
+        update_textures();
+
         let dt = Instant::now().duration_since(last_render_start).as_millis() as f64;
         if dt < 2.0 {
             continue;
@@ -152,7 +164,12 @@ fn run_game(rl: &mut RaylibHandle, thread: &raylib::prelude::RaylibThread) {
                     *RENDER_STEP.lock().unwrap() = RenderFn::StartMenu;
                     return;
                 }
-                Task::OpenWorld => {}
+                Task::OpenWorld(..) | Task::CreateWorld => notice_board::add_entry(
+                    NoticeboardEntryRenderable::String(
+                        "WARN!! RECEIVED WORLD OPENING TASK IN RUN_GAME(..)".to_string(),
+                    ),
+                    20,
+                ),
             }
         }
         if had_gameupdate_scheduled {
@@ -347,9 +364,9 @@ fn run_game(rl: &mut RaylibHandle, thread: &raylib::prelude::RaylibThread) {
             Color::DARKGREEN,
         );
 
-        notice_board::render_entries(&mut d, screen_size.height / 2, screen_size.height);
-
         CurrentScreen::render(&mut config, &mut d, &screen_size, &mut world);
+        
+        notice_board::render_entries(&mut d, screen_size.height / 2, screen_size.height);
     }
 }
 
@@ -366,19 +383,23 @@ fn main() {
         .vsync() // nvidia fucks with vsync :sob:
         .build();
 
+    rl.set_exit_key(None);
+
+    if let Err(e) = load_block_files(&mut rl, &thread) {
+        panic!("Encountered an error while trying to load the block files:\n{e}");
+    }
     register_blocks();
     register_items();
 
     while !rl.window_should_close() {
-        let render_fn = *RENDER_STEP.lock().unwrap();
-        *RENDER_STEP.lock().unwrap() = RenderFn::None;
+        let render_fn = RENDER_STEP.lock().unwrap().take();
 
         reset_all();
 
         match render_fn {
             RenderFn::None => return,
             RenderFn::StartMenu => render_menu(&mut rl, &thread),
-            RenderFn::Game => run_game(&mut rl, &thread),
+            RenderFn::Game(world, cfg) => run_game(&mut rl, &thread, world, cfg),
         }
     }
 }
@@ -411,11 +432,26 @@ pub fn render_menu(rl: &mut RaylibHandle, thread: &raylib::prelude::RaylibThread
                 Task::OpenScreenCentered(screen) => CurrentScreen::open_centered(screen, &sc),
                 Task::ExitGame => return,
                 Task::Custom(func) => func(),
-                Task::OpenWorld => {
-                    *RENDER_STEP.lock().unwrap() = RenderFn::Game;
+                Task::CreateWorld => {
+                    *RENDER_STEP.lock().unwrap() =
+                        RenderFn::Game(World::new(20, 20), GameConfig::default());
                     return;
                 }
+                Task::OpenWorld(file) => match load_game(file) {
+                    Ok((world, cfg, _)) => {
+                        *RENDER_STEP.lock().unwrap() = RenderFn::Game(world, cfg);
+                        return;
+                    }
+                    Err(e) => notice_board::add_entry(
+                        NoticeboardEntryRenderable::String(format!("Couldn't load World: {e:?}")),
+                        20,
+                    ),
+                },
             }
+        }
+
+        if rl.is_key_down(KeyboardKey::KEY_ESCAPE) {
+            CurrentScreen::close();
         }
 
         let mut d = rl.begin_drawing(thread);
@@ -426,6 +462,7 @@ pub fn render_menu(rl: &mut RaylibHandle, thread: &raylib::prelude::RaylibThread
             CurrentScreen::open_centered(Box::new(MainScreen), &sc);
         }
         CurrentScreen::render(&mut cfg, &mut d, &sc, &mut empty_world);
+        notice_board::render_entries(&mut d, sc.height / 2, sc.height);
     }
 }
 

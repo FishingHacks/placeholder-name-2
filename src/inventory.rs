@@ -3,6 +3,7 @@ use std::fmt::Debug;
 use crate::{
     items::Item,
     notice_board::{self, NoticeboardEntryRenderable},
+    serialization::{Buffer, Deserialize, SerializationError, Serialize},
 };
 
 pub const NUM_SLOTS_PLAYER: usize = 5 * 9;
@@ -332,5 +333,30 @@ impl Inventory {
             }
         }
         None
+    }
+}
+
+impl Serialize for Inventory {
+    fn required_length(&self) -> usize {
+        bool::required_length(&false) + self.items.required_length()
+    }
+
+    fn serialize(&self, buf: &mut Vec<u8>) {
+        self.items.serialize(buf);
+        self.is_player.serialize(buf);
+    }
+}
+
+impl Deserialize for Inventory {
+    fn deserialize(buf: &mut Buffer) -> Self {
+        let items = <Vec<Option<Box<dyn Item>>>>::deserialize(buf);
+        let is_player = bool::deserialize(buf);
+        Self { is_player, items }
+    }
+
+    fn try_deserialize(buf: &mut Buffer) -> Result<Self, SerializationError> {
+        let items = <Vec<Option<Box<dyn Item>>>>::try_deserialize(buf)?;
+        let is_player = bool::try_deserialize(buf)?;
+        Ok(Self { is_player, items })
     }
 }
