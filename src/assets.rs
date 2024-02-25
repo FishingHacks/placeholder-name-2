@@ -49,6 +49,7 @@ pub struct Frame {
     pub length: u64,
 }
 
+#[allow(dead_code)]
 impl Frame {
     pub fn new(id: u8, length: u64) -> Self {
         Self { id, length }
@@ -134,6 +135,7 @@ pub fn update_textures() {
     }
 }
 
+#[allow(dead_code)]
 impl AnimatedTexture2D {
     fn new(texture: Texture2D, frames: Vec<Frame>, width: u32, height: u32) -> Self {
         let length = frames

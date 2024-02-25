@@ -20,18 +20,8 @@ impl<T: Sync> InitializedData<T> {
         Self(Cell::new(None))
     }
 
-    pub fn newinit(value: T) -> Self {
-        Self(Cell::new(Some(value)))
-    }
-
     pub fn init(&self, value: T) {
         self.0.set(Some(value))
-    }
-
-    pub fn init_maybe(&self, value: Option<T>) {
-        if value.is_some() {
-            self.0.set(value)
-        }
     }
 
     pub fn is_init(&self) -> bool {

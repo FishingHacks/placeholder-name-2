@@ -17,19 +17,19 @@ use screens::{
 use serialization::load_game;
 use world::World;
 
-pub mod as_any;
-pub mod assets;
-pub mod blocks;
-pub mod identifier;
-pub mod game;
-pub mod initialized_data;
+mod as_any;
+mod assets;
+mod blocks;
+mod identifier;
+mod game;
+mod initialized_data;
 mod inventory;
-pub mod items;
-pub mod notice_board;
-pub mod scheduler;
+mod items;
+mod notice_board;
+mod scheduler;
 mod screens;
-pub mod serialization;
-pub mod ui;
+mod serialization;
+mod ui;
 mod world;
 
 #[macro_export]
@@ -83,7 +83,7 @@ fn main() {
         reset_all();
 
         match render_fn {
-            RenderFn::None => return,
+            RenderFn::None => break,
             RenderFn::StartMenu => render_menu(&mut rl, &thread),
             RenderFn::Game(world, cfg) => run_game(&mut rl, &thread, world, cfg),
         }
@@ -117,7 +117,7 @@ pub fn render_menu(rl: &mut RaylibHandle, thread: &raylib::prelude::RaylibThread
                 Task::CloseScreen => close_screen(),
                 Task::OpenScreenCentered(screen) => CurrentScreen::open_centered(screen, &sc),
                 Task::ExitGame => return,
-                Task::Custom(func) => func(),
+                // Task::Custom(func) => func(),
                 Task::CreateWorld => {
                     *RENDER_STEP.lock().unwrap() =
                         RenderFn::Game(World::new(20, 20), GameConfig::default());

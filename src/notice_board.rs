@@ -14,6 +14,7 @@ use crate::{
     blocks::Block, game::RenderLayer, items::Item, world::{ChunkBlockMetadata, Direction}
 };
 
+#[allow(dead_code)]
 pub enum NoticeboardEntryRenderable {
     String(String),
     StringRef(&'static str),

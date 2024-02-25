@@ -6,7 +6,11 @@ use std::{
 };
 
 use crate::{
-    blocks::{empty_block, Block}, game::RenderLayer, identifier::Identifier, inventory::Inventory, serialization::{Buffer, Deserialize, SerializationError, SerializationTrap, Serialize}
+    blocks::{empty_block, Block},
+    game::RenderLayer,
+    identifier::Identifier,
+    inventory::Inventory,
+    serialization::{Buffer, Deserialize, SerializationError, SerializationTrap, Serialize},
 };
 
 #[derive(Clone)]
@@ -138,29 +142,40 @@ impl World {
         w: u32,
         h: u32,
         layer: RenderLayer,
+        blk_w: u32,
+        blk_h: u32,
     ) {
-        let first_chunk_x = 0.max((x.wrapping_div(CHUNK_W as i32)) - self.startx - 1) as u32;
-        let first_chunk_y = 0.max((y.wrapping_div(CHUNK_H as i32)) - self.starty - 1) as u32;
+        let chunk_w: u32 = blk_w * BLOCKS_PER_CHUNK_X;
+        let chunk_h: u32 = blk_h * BLOCKS_PER_CHUNK_Y;
+        let first_chunk_x = 0.max((x.wrapping_div(chunk_w as i32)) - self.startx - 1) as u32;
+        let first_chunk_y = 0.max((y.wrapping_div(chunk_h as i32)) - self.starty - 1) as u32;
 
         let last_chunk_x = self
             .w
-            .min(w.wrapping_div_euclid(CHUNK_W) + 3 + first_chunk_x);
+            .min(w.wrapping_div_euclid(chunk_w) + 3 + first_chunk_x);
         let last_chunk_y = self
             .h
-            .min(h.wrapping_div_euclid(CHUNK_H) + 3 + first_chunk_y);
+            .min(h.wrapping_div_euclid(chunk_h) + 3 + first_chunk_y);
 
         for chunk_x in first_chunk_x..last_chunk_x {
             for chunk_y in first_chunk_y..last_chunk_y {
                 let chunk_x = chunk_x as i32 + self.startx;
                 let chunk_y = chunk_y as i32 + self.starty;
-                let sc_x = chunk_x * CHUNK_W as i32 - x;
-                let sc_y = chunk_y * CHUNK_H as i32 - y;
+                let sc_x = chunk_x * chunk_w as i32 - x;
+                let sc_y = chunk_y * chunk_h as i32 - y;
 
                 if let Some(chunk) = self.chunks.get_mut(&(chunk_x, chunk_y)) {
-                    chunk.render(d, sc_x, sc_y, CHUNK_W, CHUNK_H, BLOCK_W, BLOCK_H, layer);
+                    chunk.render(d, sc_x, sc_y, chunk_w, chunk_h, blk_w, blk_h, layer);
                 }
             }
         }
+    }
+
+    pub fn get_effective_render_position(&self, pos: Vec2i, player: Vec2i, blk_w: u32, blk_h: u32) -> Vec2i {
+        Vec2i::new(
+            pos.x * blk_w as i32 - player.x,
+            pos.y * blk_h as i32 - player.y,
+        )
     }
 }
 
@@ -185,7 +200,6 @@ impl Serialize for World {
         self.starty.serialize(buf);
         self.w.serialize(buf);
         self.h.serialize(buf);
-        // self.chunks.serialize(buf);
         assert_eq!(self.w as usize * self.h as usize, self.chunks.len());
         let mut vals = self
             .chunks
@@ -259,12 +273,10 @@ impl Deserialize for World {
     }
 }
 
-pub const BLOCK_W: u32 = 64;
-pub const BLOCK_H: u32 = 64;
+pub const BLOCK_DEFAULT_W: u32 = 64;
+pub const BLOCK_DEFAULT_H: u32 = 64;
 pub const BLOCKS_PER_CHUNK_X: u32 = 32;
 pub const BLOCKS_PER_CHUNK_Y: u32 = 32;
-pub const CHUNK_W: u32 = BLOCK_W * BLOCKS_PER_CHUNK_X;
-pub const CHUNK_H: u32 = BLOCK_H * BLOCKS_PER_CHUNK_Y;
 
 /// chunks: 32x32 area
 #[derive(Clone)]
@@ -580,7 +592,7 @@ impl Direction {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Vec2i {
     pub x: i32,
     pub y: i32,

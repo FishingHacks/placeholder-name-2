@@ -7,7 +7,11 @@ use raylib::{
 };
 
 use crate::{
-    blocks::Block, game::RenderLayer, identifier::{GlobalString, Identifier}, serialization::{Buffer, SerializationError}, world::{ChunkBlockMetadata, Direction}
+    blocks::Block,
+    game::RenderLayer,
+    identifier::{GlobalString, Identifier},
+    serialization::{Buffer, SerializationError},
+    world::{ChunkBlockMetadata, Direction},
 };
 
 impl Clone for Box<dyn Item> {
@@ -56,8 +60,12 @@ lazy_static! {
 macro_rules! empty_serializable {
     () => {
         fn serialize(&self, _: &mut Vec<u8>) {}
-        fn try_deserialize(&mut self, _: &mut Buffer) -> Result<(), SerializationError> {Ok(())}
-        fn required_length(&self) -> usize {0}
+        fn try_deserialize(&mut self, _: &mut Buffer) -> Result<(), SerializationError> {
+            Ok(())
+        }
+        fn required_length(&self) -> usize {
+            0
+        }
     };
 }
 
@@ -133,9 +141,7 @@ impl Item for BlockItem {
 pub static mut ITEMS: Vec<Box<dyn Item>> = Vec::new();
 
 pub fn register_items() {
-    unsafe {
-        ITEMS.push(Box::new(ItemCoal(1)));
-    }
+    register_item(Box::new(ItemCoal(1)));
 }
 
 pub fn register_item(item: Box<dyn Item>) {
@@ -159,8 +165,4 @@ pub fn get_item_by_id(id: Identifier) -> Option<&'static Box<dyn Item>> {
         }
     }
     None
-}
-
-pub fn empty_item() -> &'static Box<dyn Item> {
-    unsafe { &ITEMS[0] }
 }
