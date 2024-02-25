@@ -7,11 +7,7 @@ use raylib::{
 };
 
 use crate::{
-    blocks::Block,
-    identifier::{GlobalString, Identifier},
-    serialization::{Buffer, SerializationError},
-    world::{ChunkBlockMetadata, Direction},
-    RenderLayer,
+    blocks::Block, game::RenderLayer, identifier::{GlobalString, Identifier}, serialization::{Buffer, SerializationError}, world::{ChunkBlockMetadata, Direction}
 };
 
 impl Clone for Box<dyn Item> {

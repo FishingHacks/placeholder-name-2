@@ -7,7 +7,7 @@ use raylib::{
 };
 
 use crate::{
-    blocks::BLOCKS, identifier::GlobalString, world::ChunkBlockMetadata, GameConfig, RenderLayer,
+    blocks::BLOCKS, identifier::GlobalString, world::ChunkBlockMetadata, GameConfig, game::InteractionMode, game::RenderLayer
 };
 
 use super::{get_colors, Screen, ScreenDimensions};
@@ -45,12 +45,11 @@ impl Screen for SelectorScreen {
     ) {
         let w_preview = w / 4;
         let x_preview = x + w - w_preview;
-        let w = if cfg.current_selected_block.is_none() {
-            w
-        } else {
-            w / 4 * 3 - 10
-        };
+        let mut selected_block: Option<usize> = None;
+        let w = w / 4 * 3 - 10;
         let buttons_per_row = w.max(0) as u32 / (BUTTON_MARGIN * 2 + BUTTON_PAD * 2 + BLOCK_W);
+
+        let mouse_pos = renderer.get_mouse_position();
 
         let mut block_idx: usize = 0;
         for i in unsafe { 1..BLOCKS.len() } {
@@ -68,16 +67,21 @@ impl Screen for SelectorScreen {
             let y =
                 y + (BUTTON_MARGIN + col * (BUTTON_MARGIN * 2 + BUTTON_PAD * 2 + BLOCK_H)) as i32;
 
-            if renderer.gui_button(
-                Rectangle::new(
-                    x as f32,
-                    y as f32,
-                    (BUTTON_PAD * 2 + BLOCK_W) as f32,
-                    (BUTTON_PAD * 2 + BLOCK_H) as f32,
-                ),
-                None,
-            ) {
+            let button_rect = Rectangle::new(
+                x as f32,
+                y as f32,
+                (BUTTON_PAD * 2 + BLOCK_W) as f32,
+                (BUTTON_PAD * 2 + BLOCK_H) as f32,
+            );
+
+            if selected_block.is_none() && button_rect.check_collision_point_rec(mouse_pos) {
+                selected_block = Some(i);
+            }
+
+            if renderer.gui_button(button_rect, None) {
                 cfg.current_selected_block = blk;
+                cfg.interaction_mode = InteractionMode::Building;
+                self.close();
             }
             blk.render(
                 renderer,
@@ -91,63 +95,64 @@ impl Screen for SelectorScreen {
             block_idx += 1;
         }
 
-        if !cfg.current_selected_block.is_none() {
-            let colors = get_colors();
+        let colors = get_colors();
 
-            renderer.draw_rectangle(x + w + 4, y - 6, 2, h + 10, colors.border);
+        renderer.draw_rectangle(x + w + 4, y - 6, 2, h + 10, colors.border);
+        
+        if let Some(selected_block) = selected_block {
+            let selected_block = unsafe { &BLOCKS[selected_block] };
+            if !selected_block.is_none() {
 
-            renderer.draw_rectangle_lines_ex(
-                Rectangle::new(
-                    (x_preview + ((w_preview - 72) / 2)) as f32,
-                    (y + 5) as f32,
-                    72.0,
-                    72.0,
-                ),
-                4,
-                colors.border,
-            );
-            cfg.current_selected_block.render(
-                renderer,
-                x_preview + ((w_preview - 72) / 2 + 4),
-                y + 9,
-                64,
-                64,
-                ChunkBlockMetadata::default(),
-                RenderLayer::Block,
-            );
 
-            let text = cfg.current_selected_block.name().as_str();
-            let text_size = measure_text(text, 20);
-            let text_x = x_preview + (w_preview - text_size - 8).max(0) / 2 + 4;
-            renderer.draw_text_rec(
-                renderer.get_font_default(),
-                &text,
-                Rectangle::new(
-                    text_x as f32,
-                    (y + 90) as f32,
-                    (w_preview - 8) as f32,
+                renderer.draw_rectangle_lines_ex(
+                    Rectangle::new(
+                        (x_preview + ((w_preview - 72) / 2)) as f32,
+                        (y + 5) as f32,
+                        72.0,
+                        72.0,
+                    ),
+                    4,
+                    colors.border,
+                );
+
+                selected_block.render(
+                    renderer,
+                    x_preview + ((w_preview - 72) / 2 + 4),
+                    y + 9,
+                    64,
+                    64,
+                    ChunkBlockMetadata::default(),
+                    RenderLayer::Block,
+                );
+
+                let text = selected_block.name().as_str();
+                let text_size = measure_text(text, 20);
+                let text_x = x_preview + (w_preview - text_size - 8).max(0) / 2 + 4;
+                renderer.draw_text_rec(
+                    renderer.get_font_default(),
+                    &text,
+                    Rectangle::new(text_x as f32, (y + 90) as f32, (w_preview - 8) as f32, 20.0),
                     20.0,
-                ),
-                20.0,
-                2.0,
-                false,
-                colors.text,
-            );
+                    2.0,
+                    false,
+                    colors.text,
+                );
 
-            renderer.draw_text_rec(
-                renderer.get_font_default(),
-                cfg.current_selected_block.description(),
-                Rectangle::new(
-                    (x_preview + 4) as f32,
-                    (y + 130) as f32,
-                    (w_preview - 8) as f32,
-                    (h - 130) as f32,
-                ),
-                10.0,
-                2.0,
-                false,
-                colors.text,
-            );
+                renderer.draw_text_rec(
+                    renderer.get_font_default(),
+                    selected_block.description(),
+                    Rectangle::new(
+                        (x_preview + 4) as f32,
+                        (y + 130) as f32,
+                        (w_preview - 8) as f32,
+                        (h - 130) as f32,
+                    ),
+                    10.0,
+                    2.0,
+                    false,
+                    colors.text,
+                );
+            }
         }
     }
 }

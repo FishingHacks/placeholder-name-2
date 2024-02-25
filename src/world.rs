@@ -6,10 +6,7 @@ use std::{
 };
 
 use crate::{
-    blocks::{empty_block, Block},
-    identifier::Identifier,
-    serialization::{Buffer, Deserialize, SerializationError, SerializationTrap, Serialize},
-    RenderLayer,
+    blocks::{empty_block, Block}, game::RenderLayer, identifier::Identifier, inventory::Inventory, serialization::{Buffer, Deserialize, SerializationError, SerializationTrap, Serialize}
 };
 
 #[derive(Clone)]
@@ -63,6 +60,22 @@ impl World {
             .get_mut(&(chunk_x, chunk_y))?
             .get_block_at_mut(x, y);
         Some((&mut blk.inner, blk.data))
+    }
+
+    pub fn destroy_block_at(&mut self, x: i32, y: i32, inventory: &mut Inventory) {
+        let mut chunk_x = x / BLOCKS_PER_CHUNK_X as i32;
+        let mut chunk_y = y / BLOCKS_PER_CHUNK_Y as i32;
+
+        if (x % BLOCKS_PER_CHUNK_X as i32) < 0 {
+            chunk_x -= 1;
+        }
+        if (y % BLOCKS_PER_CHUNK_Y as i32) < 0 {
+            chunk_y -= 1;
+        }
+
+        if let Some(chunk) = self.chunks.get_mut(&(chunk_x, chunk_y)) {
+            chunk.destroy_block_at(x, y, inventory);
+        }
     }
 
     pub fn set_block_at(&mut self, x: i32, y: i32, block: Box<dyn Block>, dir: Direction) -> bool {
@@ -286,9 +299,7 @@ impl Chunk {
         }
     }
 
-    pub fn set_block_at(&mut self, x: i32, y: i32, new_block: Box<dyn Block>, dir: Direction) {
-        let blk = ChunkBlock::new(new_block, x, y, dir);
-
+    pub fn destroy_block_at(&mut self, x: i32, y: i32, inventory: &mut Inventory) {
         let mut off_x = x % BLOCKS_PER_CHUNK_X as i32;
         let mut off_y = y % BLOCKS_PER_CHUNK_Y as i32;
 
@@ -299,6 +310,46 @@ impl Chunk {
             off_y += BLOCKS_PER_CHUNK_X as i32;
         }
 
+        if self.blocks[off_y as usize * BLOCKS_PER_CHUNK_X as usize + off_x as usize]
+            .inner
+            .is_none()
+        {
+            return;
+        }
+
+        let return_blocks = self.blocks
+            [off_y as usize * BLOCKS_PER_CHUNK_X as usize + off_x as usize]
+            .inner
+            .destroy_items();
+
+        for itm in return_blocks {
+            inventory.try_add_item(itm);
+        }
+
+        let blk = ChunkBlock::new(empty_block().clone_block(), x, y, Direction::North);
+        self.blocks[off_y as usize * BLOCKS_PER_CHUNK_X as usize + off_x as usize] = blk;
+        self.blocks[off_y as usize * BLOCKS_PER_CHUNK_X as usize + off_x as usize].init();
+    }
+
+    pub fn set_block_at(&mut self, x: i32, y: i32, new_block: Box<dyn Block>, dir: Direction) {
+        let mut off_x = x % BLOCKS_PER_CHUNK_X as i32;
+        let mut off_y = y % BLOCKS_PER_CHUNK_Y as i32;
+
+        if off_x < 0 {
+            off_x += BLOCKS_PER_CHUNK_X as i32;
+        }
+        if off_y < 0 {
+            off_y += BLOCKS_PER_CHUNK_X as i32;
+        }
+
+        if !self.blocks[off_y as usize * BLOCKS_PER_CHUNK_X as usize + off_x as usize]
+            .inner
+            .is_none()
+        {
+            return;
+        }
+
+        let blk = ChunkBlock::new(new_block, x, y, dir);
         self.blocks[off_y as usize * BLOCKS_PER_CHUNK_X as usize + off_x as usize] = blk;
         self.blocks[off_y as usize * BLOCKS_PER_CHUNK_X as usize + off_x as usize].init();
     }
@@ -618,8 +669,8 @@ impl Display for Vec2i {
 }
 
 impl Vec2i {
-    pub const ZERO: Vec2i = Vec2i { x: 0, y: 0 }; 
-    pub const ONE: Vec2i = Vec2i { x: 1, y: 1 }; 
+    pub const ZERO: Vec2i = Vec2i { x: 0, y: 0 };
+    pub const ONE: Vec2i = Vec2i { x: 1, y: 1 };
 
     pub fn new(x: i32, y: i32) -> Self {
         Self { x, y }

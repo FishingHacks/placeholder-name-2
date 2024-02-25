@@ -21,11 +21,11 @@ macro_rules! derive_as_any {
 macro_rules! downcast_for {
     ($name: tt) => {
         #[allow(dead_code)]
-        fn downcast<T: 'static + $name>(this: &dyn $name) -> Option<&T> {
+        pub fn downcast<T: 'static + $name>(this: &dyn $name) -> Option<&T> {
             this.as_any().downcast_ref()
         }
         #[allow(dead_code)]
-        fn downcast_mut<T: 'static + $name>(this: &mut dyn $name) -> Option<&mut T> {
+        pub fn downcast_mut<T: 'static + $name>(this: &mut dyn $name) -> Option<&mut T> {
             this.as_any_mut().downcast_mut()
         }
     };

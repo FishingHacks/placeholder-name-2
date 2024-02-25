@@ -11,9 +11,7 @@ use raylib::{
 };
 
 use crate::{
-    blocks::Block,
-    items::Item,
-    world::{ChunkBlockMetadata, Direction}, RenderLayer,
+    blocks::Block, game::RenderLayer, items::Item, world::{ChunkBlockMetadata, Direction}
 };
 
 pub enum NoticeboardEntryRenderable {

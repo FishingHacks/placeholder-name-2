@@ -54,7 +54,7 @@ impl Frame {
         Self { id, length }
     }
 
-    pub fn multiple_regular(length_per_frame: u64, num_frames: u8) -> Vec<Self> {
+    pub fn multiple(length_per_frame: u64, num_frames: u8) -> Vec<Self> {
         let mut vec = Vec::with_capacity(num_frames as usize);
         for i in 0..num_frames {
             vec.push(Self {
@@ -156,6 +156,15 @@ impl AnimatedTexture2D {
         Rectangle::new(
             0.0,
             (self.current_frame * self.height) as f32,
+            self.width as f32,
+            self.height as f32,
+        )
+    }
+
+    pub fn get_frame_texture_rect(&self, current_frame: u32) -> Rectangle {
+        Rectangle::new(
+            0.0,
+            (current_frame * self.height) as f32,
             self.width as f32,
             self.height as f32,
         )

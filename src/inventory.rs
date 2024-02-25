@@ -47,6 +47,14 @@ impl Debug for Inventory {
 }
 
 impl Inventory {
+    pub fn destroy_items(&self) -> Vec<Box<dyn Item>> {
+        self.items
+            .iter()
+            .filter(|el| el.is_some())
+            .map(|el| el.clone().unwrap())
+            .collect()
+    }
+
     pub fn update(&mut self) {
         for itm in &mut self.items {
             if let Some(item) = itm {
