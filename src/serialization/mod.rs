@@ -92,7 +92,7 @@ macro_rules! num_serializable {
             }
             fn required_length(&self) -> usize { std::mem::size_of::<$name>() }
         }
-
+        
         impl Deserialize for $name {
             fn deserialize(buf: &mut Buffer) -> Self { Self::try_deserialize(buf).expect(concat!("Failed to deserialize ", stringify!($name))) }
             fn try_deserialize(buf: &mut Buffer) -> Result<Self, SerializationError> {

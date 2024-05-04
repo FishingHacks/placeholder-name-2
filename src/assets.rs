@@ -12,7 +12,7 @@ use raylib::{
     RaylibHandle, RaylibThread,
 };
 
-use crate::{initialized_data::InitializedData, world::Direction};
+use crate::{initialized_data::InitializedData, world::{Direction, Vec2i}};
 
 #[macro_export]
 macro_rules! asset {
@@ -237,23 +237,24 @@ impl AnimatedTexture2D {
         height: i32,
         rotation: Direction,
     ) {
-        let mut dest = Rectangle::new(x as f32, y as f32, width as f32, height as f32);
-        let rotation = match rotation {
-            Direction::North => 0.0,
-            Direction::South => {
-                dest.x += width as f32;
-                dest.y += height as f32;
-                180.0
-            }
-            Direction::East => {
-                dest.y += height as f32;
-                270.0
-            }
-            Direction::West => {
-                dest.x += width as f32;
-                90.0
-            }
-        };
+        let (rotation, vec) = get_rotation_vec(rotation, Vec2i::new(x, y), width, height);
+        let dest = Rectangle::new(vec.x as f32, vec.y as f32, width as f32, height as f32);
+        // let rotation = match rotation {
+        //     Direction::North => 0.0,
+        //     Direction::South => {
+        //         dest.x += width as f32;
+        //         dest.y += height as f32;
+        //         180.0
+        //     }
+        //     Direction::East => {
+        //         dest.y += height as f32;
+        //         270.0
+        //     }
+        //     Direction::West => {
+        //         dest.x += width as f32;
+        //         90.0
+        //     }
+        // };
         renderer.draw_texture_pro(
             &self.texture,
             self.get_texture_rect(),
@@ -263,4 +264,24 @@ impl AnimatedTexture2D {
             Color::WHITE,
         );
     }
+}
+
+pub fn get_rotation_vec(dir: Direction, mut vec: Vec2i, width: i32, height: i32) -> (f32, Vec2i) {
+    let rotation = match dir {
+        Direction::North => 0.0,
+        Direction::South => {
+            vec.x += width;
+            vec.y += height;
+            180.0
+        }
+        Direction::East => {
+            vec.y += height;
+            270.0
+        }
+        Direction::West => {
+            vec.x += width;
+            90.0
+        }
+    };
+    (rotation, vec)
 }

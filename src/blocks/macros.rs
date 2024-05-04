@@ -149,7 +149,10 @@ macro_rules! empty_serializable {
 #[macro_export]
 macro_rules! simple_single_item_serializable {
     ($index: tt) => {
-        fn try_deserialize(&mut self, buf: &mut crate::serialization::Buffer) -> Result<(), crate::serialization::SerializationError> {
+        fn try_deserialize(
+            &mut self,
+            buf: &mut crate::serialization::Buffer,
+        ) -> Result<(), crate::serialization::SerializationError> {
             use crate::serialization::Deserialize;
             let item = <Option<Box<dyn crate::items::Item>>>::try_deserialize(buf)?;
             self.$index.resize(1);
@@ -170,7 +173,10 @@ macro_rules! simple_single_item_serializable {
 #[macro_export]
 macro_rules! simple_single_item_direction_serializable {
     ($item: tt, $direction: tt) => {
-        fn try_deserialize(&mut self, buf: &mut crate::serialization::Buffer) -> Result<(), crate::serialization::SerializationError> {
+        fn try_deserialize(
+            &mut self,
+            buf: &mut crate::serialization::Buffer,
+        ) -> Result<(), crate::serialization::SerializationError> {
             use crate::serialization::Deserialize;
             self.$item.resize(1);
             *self.$item.get_item_mut(0) = Deserialize::try_deserialize(buf)?;

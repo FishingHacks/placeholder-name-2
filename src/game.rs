@@ -7,8 +7,7 @@ use crate::{
     notice_board::{self, NoticeboardEntryRenderable},
     scheduler::{get_tasks, schedule_task, Task},
     screens::{
-        close_screen, CurrentScreen, EscapeScreen, PlayerInventoryScreen, ScreenDimensions,
-        SelectorScreen,
+        close_screen, CurrentScreen, EscapeScreen, PlayerInventoryScreen, ScreenDimensions, SelectorScreen
     },
     serialization::{self, Deserialize, SerializationTrap, Serialize},
     world::{ChunkBlockMetadata, Direction, Vec2i, World, BLOCK_DEFAULT_H, BLOCK_DEFAULT_W},
@@ -26,11 +25,12 @@ use raylib::{drawing::RaylibDraw, ffi::KeyboardKey};
 pub enum RenderLayer {
     Block,
     OverlayItems,
+    Preview,
 }
 
 impl RenderLayer {
     pub fn default_preview() -> Self {
-        Self::Block
+        Self::Preview
     }
 }
 
@@ -120,7 +120,6 @@ macro_rules! lerp_step {
         }
     }};
 }
-
 
 pub fn run_game(
     rl: &mut RaylibHandle,
@@ -336,21 +335,25 @@ pub fn run_game(
         if rl.is_mouse_button_down(raylib::ffi::MouseButton::MOUSE_LEFT_BUTTON) && game_focused {
             match config.interaction_mode {
                 InteractionMode::Building if can_build => {
-                    world.set_block_at(
-                        cursor_x,
-                        cursor_y,
-                        config.current_selected_block.clone_block(),
-                        config.direction,
+                    let mut blk = config.current_selected_block.clone_block();
+                    blk.on_before_place(
+                        ChunkBlockMetadata::new(config.direction, Vec2i::new(cursor_x, cursor_y)),
+                        &mut world,
                     );
+                    world.set_block_at(cursor_x, cursor_y, blk, config.direction);
                 }
                 InteractionMode::Dismantling if can_dismantle || dismantle_positions.len() > 0 => {
                     if let Some(timer) = dismantle_timer {
                         if timer <= Instant::now() {
                             if can_dismantle {
-                                world.destroy_block_at(cursor_x, cursor_y, &mut config.inventory);
+                                if let Some((mut blk, meta)) = world.destroy_block_at(cursor_x, cursor_y, &mut config.inventory) {
+                                    blk.on_after_dismantle(meta, &mut world);
+                                }
                             }
                             for vec in &dismantle_positions {
-                                world.destroy_block_at(vec.x, vec.y, &mut config.inventory);
+                                if let Some((mut blk, meta)) = world.destroy_block_at(vec.x, vec.y, &mut config.inventory) {
+                                    blk.on_after_dismantle(meta, &mut world);
+                                }
                             }
                             dismantle_positions.clear();
                             let mut now = Instant::now();
@@ -416,6 +419,15 @@ pub fn run_game(
         if game_focused {
             match config.interaction_mode {
                 InteractionMode::Building if can_build => {
+                    config.current_selected_block.render_build_overlay(
+                        &mut d,
+                        overlay_x,
+                        overlay_y,
+                        blk_w as i32,
+                        blk_h as i32,
+                        ChunkBlockMetadata::new(config.direction, Vec2i::new(cursor_x, cursor_y)),
+                        config.player,
+                    );
                     d.draw_rectangle(
                         overlay_x,
                         overlay_y,

@@ -10,13 +10,13 @@ use raylib::{
 use crate::{
     block_impl_details_with_timer,
     blocks::downcast_mut,
+    game::RenderLayer,
     identifier::{GlobalString, Identifier},
     inventory::Inventory,
     reset_timer,
     scheduler::{schedule_task, Task},
     simple_single_item_serializable,
     world::{ChunkBlockMetadata, Direction, Vec2i, World},
-    game::RenderLayer,
 };
 
 use super::Block;
@@ -56,7 +56,7 @@ impl Block for ExtractorBlock {
         meta: ChunkBlockMetadata,
         layer: RenderLayer,
     ) {
-        if layer == RenderLayer::Block {
+        if layer == RenderLayer::Block || layer == RenderLayer::Preview {
             d.draw_rectangle(x, y, w, h, Color::ORANGE);
             let (vec_1, vec_2, vec_3) = match meta.direction {
                 Direction::North => (

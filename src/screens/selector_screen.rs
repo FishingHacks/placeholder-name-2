@@ -122,7 +122,7 @@ impl Screen for SelectorScreen {
                     64,
                     64,
                     ChunkBlockMetadata::default(),
-                    RenderLayer::Block,
+                    RenderLayer::default_preview(),
                 );
 
                 let text = selected_block.name().as_str();

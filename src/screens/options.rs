@@ -6,11 +6,11 @@ use crate::{identifier::GlobalString, styles};
 use super::{get_colors, Screen};
 
 #[derive(Default)]
-pub struct OptionsScreen();
+pub struct OptionsScreen;
 
 impl OptionsScreen {
     pub fn new() -> Box<Self> {
-        Box::new(Self::default())
+        Box::new(Self)
     }
 }
 

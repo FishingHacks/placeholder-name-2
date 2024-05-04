@@ -1,4 +1,7 @@
-use raylib::drawing::RaylibDrawHandle;
+use raylib::{
+    drawing::RaylibDrawHandle,
+    math::Vector2,
+};
 use std::{
     collections::HashMap,
     fmt::Display,
@@ -66,7 +69,12 @@ impl World {
         Some((&mut blk.inner, blk.data))
     }
 
-    pub fn destroy_block_at(&mut self, x: i32, y: i32, inventory: &mut Inventory) {
+    pub fn destroy_block_at(
+        &mut self,
+        x: i32,
+        y: i32,
+        inventory: &mut Inventory,
+    ) -> Option<(Box<dyn Block>, ChunkBlockMetadata)> {
         let mut chunk_x = x / BLOCKS_PER_CHUNK_X as i32;
         let mut chunk_y = y / BLOCKS_PER_CHUNK_Y as i32;
 
@@ -77,9 +85,9 @@ impl World {
             chunk_y -= 1;
         }
 
-        if let Some(chunk) = self.chunks.get_mut(&(chunk_x, chunk_y)) {
-            chunk.destroy_block_at(x, y, inventory);
-        }
+        self.chunks
+            .get_mut(&(chunk_x, chunk_y))
+            .and_then(|chunk| chunk.destroy_block_at(x, y, inventory))
     }
 
     pub fn set_block_at(&mut self, x: i32, y: i32, block: Box<dyn Block>, dir: Direction) -> bool {
@@ -171,7 +179,13 @@ impl World {
         }
     }
 
-    pub fn get_effective_render_position(&self, pos: Vec2i, player: Vec2i, blk_w: u32, blk_h: u32) -> Vec2i {
+    pub fn get_effective_render_position(
+        &self,
+        pos: Vec2i,
+        player: Vec2i,
+        blk_w: u32,
+        blk_h: u32,
+    ) -> Vec2i {
         Vec2i::new(
             pos.x * blk_w as i32 - player.x,
             pos.y * blk_h as i32 - player.y,
@@ -311,7 +325,12 @@ impl Chunk {
         }
     }
 
-    pub fn destroy_block_at(&mut self, x: i32, y: i32, inventory: &mut Inventory) {
+    pub fn destroy_block_at(
+        &mut self,
+        x: i32,
+        y: i32,
+        inventory: &mut Inventory,
+    ) -> Option<(Box<dyn Block>, ChunkBlockMetadata)> {
         let mut off_x = x % BLOCKS_PER_CHUNK_X as i32;
         let mut off_y = y % BLOCKS_PER_CHUNK_Y as i32;
 
@@ -326,21 +345,26 @@ impl Chunk {
             .inner
             .is_none()
         {
-            return;
+            return None;
         }
 
-        let return_blocks = self.blocks
-            [off_y as usize * BLOCKS_PER_CHUNK_X as usize + off_x as usize]
-            .inner
-            .destroy_items();
+        let block = (
+            std::mem::replace(
+                &mut self.blocks[off_y as usize * BLOCKS_PER_CHUNK_X as usize + off_x as usize]
+                    .inner,
+                empty_block().clone(),
+            ),
+            self.blocks[off_y as usize * BLOCKS_PER_CHUNK_X as usize + off_x as usize].data,
+        );
 
+        let return_blocks = block.0.destroy_items();
         for itm in return_blocks {
             inventory.try_add_item(itm);
         }
 
-        let blk = ChunkBlock::new(empty_block().clone_block(), x, y, Direction::North);
-        self.blocks[off_y as usize * BLOCKS_PER_CHUNK_X as usize + off_x as usize] = blk;
         self.blocks[off_y as usize * BLOCKS_PER_CHUNK_X as usize + off_x as usize].init();
+
+        Some(block)
     }
 
     pub fn set_block_at(&mut self, x: i32, y: i32, new_block: Box<dyn Block>, dir: Direction) {
@@ -705,12 +729,25 @@ impl Vec2i {
             Direction::West => self.x += steps,
         }
     }
+
+    pub fn as_vec2f(self) -> Vector2 {
+        Vector2::new(self.x as f32, self.y as f32)
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ChunkBlockMetadata {
     pub position: Vec2i,
     pub direction: Direction,
+}
+
+impl ChunkBlockMetadata {
+    pub fn new(direction: Direction, position: Vec2i) -> Self {
+        Self {
+            direction,
+            position,
+        }
+    }
 }
 
 impl From<Direction> for ChunkBlockMetadata {

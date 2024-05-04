@@ -140,7 +140,7 @@ impl<T: Screen + Send> GUIScreen for T {
     ) {
         let ScreenDimensions { width, height } = self.rect(screen);
 
-        let mut name = self.name().as_str().clone();
+        let mut name = self.name().as_str().to_string();
         name.push('\0');
 
         if renderer.gui_window_box(

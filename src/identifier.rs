@@ -2,7 +2,7 @@ use std::fmt::{Debug, Display, Write};
 
 use crate::serialization::{Deserialize, Serialize};
 
-static mut GLOBAL_STRINGS: Vec<String> = Vec::new(); // used for identifiers (things that persist throughout the ENTIRE game); Yes, this is unsafe and not thread safe
+static mut GLOBAL_STRINGS: Vec<Box<str>> = Vec::new(); // used for identifiers (things that persist throughout the ENTIRE game); Yes, this is unsafe and not thread safe
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
@@ -11,12 +11,12 @@ pub struct GlobalString(usize);
 impl From<&str> for GlobalString {
     fn from(value: &str) -> Self {
         for (id, str) in unsafe { GLOBAL_STRINGS.iter().enumerate() } {
-            if str == value {
+            if (&**str) == value {
                 return GlobalString(id);
             }
         }
         unsafe {
-            GLOBAL_STRINGS.push(value.to_string());
+            GLOBAL_STRINGS.push(value.to_string().into_boxed_str());
             GlobalString(GLOBAL_STRINGS.len() - 1)
         }
     }
@@ -30,7 +30,16 @@ impl From<&String> for GlobalString {
 
 impl From<String> for GlobalString {
     fn from(value: String) -> Self {
-        Self::from(value.as_str())
+        for (id, str) in unsafe { GLOBAL_STRINGS.iter().enumerate() } {
+            if (&**str) == value {
+                return GlobalString(id);
+            }
+        }
+
+        unsafe {
+            GLOBAL_STRINGS.push(value.into_boxed_str());
+            Self(GLOBAL_STRINGS.len() - 1)
+        }
     }
 }
 
@@ -41,7 +50,7 @@ impl Default for GlobalString {
 }
 
 impl GlobalString {
-    pub fn as_str(&self) -> &'static String {
+    pub fn as_str(&self) -> &'static Box<str> {
         unsafe {
             &GLOBAL_STRINGS[self.0]
         }
@@ -74,11 +83,11 @@ impl Display for GlobalString {
 
 impl Serialize for GlobalString {
     fn required_length(&self) -> usize {
-        self.as_str().required_length()
+        (&**self.as_str()).required_length()
     }
 
     fn serialize(&self, buf: &mut Vec<u8>) {
-        self.as_str().serialize(buf)
+        (&**self.as_str()).serialize(buf)
     }
 }
 

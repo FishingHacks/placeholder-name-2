@@ -9,6 +9,7 @@ use raylib::{
 
 use crate::{
     block_impl_details_with_timer,
+    game::RenderLayer,
     identifier::{GlobalString, Identifier},
     inventory::Inventory,
     items::Item,
@@ -16,7 +17,6 @@ use crate::{
     scheduler::{schedule_task, Task},
     simple_single_item_serializable, step_size,
     world::{ChunkBlockMetadata, Direction, Vec2i, World},
-    game::RenderLayer,
 };
 
 use super::{downcast, downcast_mut, Block};
@@ -59,7 +59,7 @@ impl Block for ConveyorSplitter {
         meta: ChunkBlockMetadata,
         render_layer: RenderLayer,
     ) {
-        if render_layer == RenderLayer::Block {
+        if render_layer == RenderLayer::Block || render_layer == RenderLayer::Preview {
             d.draw_rectangle(x, y, w, h, Color::GOLD);
             let (vec_1, vec_2, vec_3) = match meta.direction {
                 Direction::North => (

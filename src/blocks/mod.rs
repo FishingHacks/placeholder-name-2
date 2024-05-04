@@ -2,12 +2,17 @@ pub mod conveyor;
 pub mod extractor;
 mod macros;
 pub mod splitter;
+pub mod tunnel;
 
 use crate::{
     as_any::AsAny,
     block_impl_details,
-    blocks::{conveyor::ConveyorBlock, extractor::ExtractorBlock, splitter::ConveyorSplitter},
+    blocks::{
+        conveyor::ConveyorBlock, extractor::ExtractorBlock, splitter::ConveyorSplitter,
+        tunnel::TunnelBlock,
+    },
     derive_as_any, downcast_for, empty_serializable,
+    game::{RenderLayer, RENDER_LAYERS},
     identifier::{GlobalString, Identifier},
     inventory::Inventory,
     items::{get_item_by_id, register_block_item, Item, COAL_IDENTIFIER},
@@ -15,8 +20,8 @@ use crate::{
     scheduler::{schedule_task, Task},
     screens::ContainerInventoryScreen,
     serialization::{Buffer, Deserialize, SerializationError, Serialize},
-    world::{ChunkBlockMetadata, Direction},
-    GameConfig, game::{RenderLayer, RENDER_LAYERS},
+    world::{ChunkBlockMetadata, Direction, Vec2i, World},
+    GameConfig,
 };
 use lazy_static::lazy_static;
 use raylib::{
@@ -52,6 +57,10 @@ pub trait Block: BlockImplDetails {
     }
     #[allow(unused_variables)]
     fn init(&mut self, meta: ChunkBlockMetadata) {}
+    #[allow(unused_variables)]
+    fn on_before_place(&mut self, meta: ChunkBlockMetadata, world: &mut World) {}
+    #[allow(unused_variables)]
+    fn on_after_dismantle(&mut self, meta: ChunkBlockMetadata, world: &mut World) {}
     fn description(&self) -> &'static str;
     fn render(
         &self,
@@ -63,6 +72,18 @@ pub trait Block: BlockImplDetails {
         meta: ChunkBlockMetadata,
         render_layer: RenderLayer,
     );
+    #[allow(unused_variables)]
+    fn render_build_overlay(
+        &self,
+        d: &mut RaylibDrawHandle,
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+        meta: ChunkBlockMetadata,
+        player_pos: Vec2i,
+    ) {
+    }
     fn render_all(
         &self,
         d: &mut RaylibDrawHandle,
@@ -154,9 +175,11 @@ impl Block for EmptyBlock {
         w: i32,
         h: i32,
         _meta: ChunkBlockMetadata,
-        _layer: RenderLayer,
+        layer: RenderLayer,
     ) {
-        d.draw_rectangle_lines(x, y, w, h, Color::GRAY);
+        if layer == RenderLayer::Block || layer == RenderLayer::Preview {
+            d.draw_rectangle_lines(x, y, w, h, Color::GRAY);
+        }
     }
     fn description(&self) -> &'static str {
         "*scared* wh- why can u see me :tbhcry:"
@@ -180,20 +203,22 @@ impl Block for ResourceNodeBrown {
         sc_w: i32,
         sc_h: i32,
         meta: ChunkBlockMetadata,
-        _layer: RenderLayer,
+        layer: RenderLayer,
     ) {
-        d.draw_rectangle(sc_x, sc_y, sc_w, sc_h, Color::BROWN);
-
-        let dir = meta.direction;
-
-        match dir {
-            crate::world::Direction::North => {
-                d.draw_rectangle(sc_x, sc_y + sc_h - 5, sc_w, 5, Color::BLACK)
-            }
-            crate::world::Direction::South => d.draw_rectangle(sc_x, sc_y, sc_w, 5, Color::BLACK),
-            crate::world::Direction::West => d.draw_rectangle(sc_x, sc_y, 5, sc_h, Color::BLACK),
-            crate::world::Direction::East => {
-                d.draw_rectangle(sc_x + sc_w - 5, sc_y, 5, sc_h, Color::BLACK)
+        if layer == RenderLayer::Block || layer == RenderLayer::Preview {
+            d.draw_rectangle(sc_x, sc_y, sc_w, sc_h, Color::BROWN);
+            
+            let dir = meta.direction;
+    
+            match dir {
+                crate::world::Direction::North => {
+                    d.draw_rectangle(sc_x, sc_y + sc_h - 5, sc_w, 5, Color::BLACK)
+                }
+                crate::world::Direction::South => d.draw_rectangle(sc_x, sc_y, sc_w, 5, Color::BLACK),
+                crate::world::Direction::West => d.draw_rectangle(sc_x, sc_y, 5, sc_h, Color::BLACK),
+                crate::world::Direction::East => {
+                    d.draw_rectangle(sc_x + sc_w - 5, sc_y, 5, sc_h, Color::BLACK)
+                }
             }
         }
     }
@@ -281,8 +306,8 @@ impl Block for StorageContainer {
     fn supports_interaction(&self) -> bool {
         true
     }
-    fn init(&mut self, _meta: ChunkBlockMetadata) {
-        self.0.resize(5 * 9);
+    fn init(&mut self, _: ChunkBlockMetadata) {
+        self.0.resize(5 * 9)
     }
     fn render(
         &self,
@@ -292,9 +317,11 @@ impl Block for StorageContainer {
         w: i32,
         h: i32,
         _meta: ChunkBlockMetadata,
-        _layer: RenderLayer,
+        layer: RenderLayer,
     ) {
-        d.draw_rectangle(x, y, w, h, Color::MAGENTA);
+        if layer == RenderLayer::Block || layer == RenderLayer::Preview {
+            d.draw_rectangle(x, y, w, h, Color::MAGENTA);
+        }
     }
     fn has_capability_push(&self, side: Direction, meta: ChunkBlockMetadata) -> bool {
         side == meta.direction || side + Direction::South == meta.direction
@@ -335,7 +362,8 @@ pub fn register_blocks() {
         StorageContainer,
         ExtractorBlock,
         ConveyorBlock,
-        ConveyorSplitter
+        ConveyorSplitter,
+        TunnelBlock
     );
 }
 
@@ -348,6 +376,7 @@ pub fn register_block(block: Box<dyn Block>) {
 
 pub fn load_block_files(rl: &mut RaylibHandle, thread: &RaylibThread) -> Result<(), String> {
     ConveyorBlock::load_block_files(rl, thread)?;
+    TunnelBlock::load_block_files(rl, thread)?;
 
     Ok(())
 }

@@ -7,6 +7,7 @@ use crate::{
     asset,
     assets::{load_animated_texture, AnimatedTexture2D, Frame},
     block_impl_details_with_timer,
+    game::RenderLayer,
     identifier::{GlobalString, Identifier},
     initialized_data::InitializedData,
     inventory::Inventory,
@@ -15,7 +16,7 @@ use crate::{
     scheduler::{schedule_task, Task},
     simple_single_item_direction_serializable, step_size,
     world::{ChunkBlockMetadata, Direction, Vec2i, World},
-    GameConfig, game::RenderLayer,
+    GameConfig,
 };
 
 use super::Block;
@@ -88,7 +89,7 @@ impl Block for ConveyorBlock {
         meta: ChunkBlockMetadata,
         layer: RenderLayer,
     ) {
-        if layer == RenderLayer::Block {
+        if layer == RenderLayer::Block  || layer == RenderLayer::Preview {
             CONVEYOR_ANIMATION.draw_resized_rotated(d, x, y, w, h, meta.direction);
         } else if layer == RenderLayer::OverlayItems {
             if let Some(item) = &self.1.get_item(0) {
@@ -206,4 +207,4 @@ impl ConveyorBlock {
     }
 }
 
-static CONVEYOR_ANIMATION: InitializedData<&'static AnimatedTexture2D> = InitializedData::new();
+pub static CONVEYOR_ANIMATION: InitializedData<&'static AnimatedTexture2D> = InitializedData::new();
